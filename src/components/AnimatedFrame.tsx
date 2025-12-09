@@ -59,6 +59,8 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
             writheSpeed: { value: mergedDefaults.writheSpeed, min: 0.1, max: 3, step: 0.1, label: 'Writhe Speed' },
             writheIntensity: { value: mergedDefaults.writheIntensity, min: 0, max: 2, step: 0.1, label: 'Writhe Intensity' },
             coilTightness: { value: mergedDefaults.coilTightness, min: 0, max: 2, step: 0.1, label: 'Coil Tightness' },
+            eldritchOriginX: { value: mergedDefaults.eldritchOriginX, min: -200, max: 200, step: 1, label: 'Origin X' },
+            eldritchOriginY: { value: mergedDefaults.eldritchOriginY, min: -200, max: 200, step: 1, label: 'Origin Y' },
         }),
         Noise: folder({
             noiseScale: { value: mergedDefaults.noiseScale, min: 0.001, max: 0.05, step: 0.001 },
@@ -177,6 +179,8 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
             writheSpeed: params.writheSpeed,
             writheIntensity: params.writheIntensity,
             coilTightness: params.coilTightness,
+            eldritchOriginX: params.eldritchOriginX,
+            eldritchOriginY: params.eldritchOriginY,
             // Noise params
             noiseScale: params.noiseScale,
             octaves: params.octaves,
@@ -191,6 +195,8 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
         params.writheSpeed,
         params.writheIntensity,
         params.coilTightness,
+        params.eldritchOriginX,
+        params.eldritchOriginY,
         params.noiseScale,
         params.octaves,
         params.falloffRadius

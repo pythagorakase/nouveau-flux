@@ -33,6 +33,8 @@ export interface AnimationParams {
     writheSpeed: number;
     writheIntensity: number;
     coilTightness: number;
+    eldritchOriginX: number;
+    eldritchOriginY: number;
     // Shared
     falloffRadius: number;
 }
@@ -52,6 +54,8 @@ export const DEFAULT_PARAMS: AnimationParams = {
     writheSpeed: 1.0,
     writheIntensity: 0.8,
     coilTightness: 0.5,
+    eldritchOriginX: 0,
+    eldritchOriginY: 0,
     // Shared
     falloffRadius: 25,
 };
@@ -188,7 +192,9 @@ export class FrameAnimator {
             breathingAmount,
             writheSpeed,
             writheIntensity,
-            coilTightness
+            coilTightness,
+            eldritchOriginX,
+            eldritchOriginY,
         } = this.params;
 
         for (let i = 0; i < numPoints; i++) {
@@ -219,7 +225,9 @@ export class FrameAnimator {
                         lacunarity,
                         writheSpeed,
                         writheIntensity,
-                        coilTightness
+                        coilTightness,
+                        originX: eldritchOriginX,
+                        originY: eldritchOriginY,
                     }
                 );
             } else {

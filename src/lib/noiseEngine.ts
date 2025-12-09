@@ -216,14 +216,18 @@ export class NoiseEngine {
             writheSpeed: number;
             writheIntensity: number;
             coilTightness: number;
+            originX?: number;
+            originY?: number;
         }
     ): { dx: number; dy: number } {
-        const { noiseScale, octaves, persistence, lacunarity, writheSpeed, writheIntensity, coilTightness } = params;
+        const { noiseScale, octaves, persistence, lacunarity, writheSpeed, writheIntensity, coilTightness, originX = 0, originY = 0 } = params;
 
-        // Use position to create wave propagation direction
+        // Use position relative to origin to create wave propagation direction
         // Points further from origin have phase delay - creates "traveling wave"
-        const distFromOrigin = Math.sqrt(x * x + y * y);
-        const angle = Math.atan2(y, x);
+        const relX = x - originX;
+        const relY = y - originY;
+        const distFromOrigin = Math.sqrt(relX * relX + relY * relY);
+        const angle = Math.atan2(relY, relX);
 
         // Layer 1: Primary writhing wave - fast sinusoidal with noise modulation
         // The phase offset by distance creates the "tentacle propagation" effect
