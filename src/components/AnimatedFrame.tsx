@@ -4,6 +4,9 @@ import { computeInfluenceMap, loadAnchors, AnchorData } from '../lib/anchorInflu
 import { FrameAnimator, DEFAULT_PARAMS, GradientStop, GradientConfig, AnimationParams } from '../lib/frameAnimator';
 import { StretchConfig, applyStretchConfig, getStretchedViewBox } from '../lib/stretchZone';
 
+// Margin around the canvas for animation overflow (as percentage of each side)
+const MARGIN_PERCENT = 0.15;
+
 export type { GradientStop };
 
 export interface StyleConfig {
@@ -113,11 +116,12 @@ const AnimatedFrameCore: React.FC<{
         const canvas = canvasRef.current;
         if (!canvas || effectiveWidth === 0 || effectiveHeight === 0) return;
 
+        const controller = new AbortController();
         let cancelled = false;
 
         async function init() {
             try {
-                const response = await fetch(svgPath);
+                const response = await fetch(svgPath, { signal: controller.signal });
                 const svgText = await response.text();
 
                 const extracted = extractPathFromSvg(svgText);
@@ -181,10 +185,9 @@ const AnimatedFrameCore: React.FC<{
                     }
                 }
 
-                // Add margin for animation overflow (based on intensity)
-                const marginPercent = 0.15; // 15% margin on each side
-                const marginX = finalWidth * marginPercent;
-                const marginY = finalHeight * marginPercent;
+                // Add margin for animation overflow
+                const marginX = finalWidth * MARGIN_PERCENT;
+                const marginY = finalHeight * MARGIN_PERCENT;
 
                 const dpr = window.devicePixelRatio || 1;
                 const canvasW = finalWidth + marginX * 2;
@@ -221,6 +224,8 @@ const AnimatedFrameCore: React.FC<{
                 animator.start();
                 setIsLoading(false);
             } catch (err) {
+                // Ignore abort errors - they're expected on cleanup
+                if (err instanceof Error && err.name === 'AbortError') return;
                 if (!cancelled) {
                     setError(err instanceof Error ? err.message : 'Unknown error');
                     setIsLoading(false);
@@ -232,6 +237,7 @@ const AnimatedFrameCore: React.FC<{
 
         return () => {
             cancelled = true;
+            controller.abort();
             animatorRef.current?.stop();
         };
     }, [svgPath, anchorsData, effectiveWidth, effectiveHeight, stretchConfig, containerSize, width]);
@@ -263,9 +269,11 @@ const AnimatedFrameCore: React.FC<{
         const animator = animatorRef.current;
         if (!animator) return;
 
+        const controller = new AbortController();
+
         (async () => {
             try {
-                const response = await fetch(svgPath);
+                const response = await fetch(svgPath, { signal: controller.signal });
                 const svgText = await response.text();
                 const extracted = extractPathFromSvg(svgText);
                 if (!extracted) return;
@@ -282,9 +290,14 @@ const AnimatedFrameCore: React.FC<{
                 );
                 animator.setInfluence(influence);
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Error recomputing influence');
+                // Ignore abort errors - they're expected on cleanup
+                if (err instanceof Error && err.name === 'AbortError') return;
+                // Log warning but don't show error UI - animator continues with stale influence data
+                console.warn('Failed to recompute influence, using previous values:', err);
             }
         })();
+
+        return () => controller.abort();
     }, [params.falloffRadius, svgPath, anchorsData, stretchConfig]);
 
     // Update style when it changes

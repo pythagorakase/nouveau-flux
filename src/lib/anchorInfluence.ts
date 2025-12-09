@@ -1,5 +1,26 @@
 // Anchor Influence Map - computes how much each path point can move based on distance to anchors
 
+// Coordinate formatting precision for anchor data (4 decimal places)
+const COORD_PRECISION = 4;
+
+/**
+ * Format a coordinate value to string with consistent precision
+ */
+export function formatCoord(n: number): string {
+    return n.toFixed(COORD_PRECISION);
+}
+
+// Valid corner positions for rectangular anchors
+const VALID_CORNERS = ['tl', 'tr', 'bl', 'br'] as const;
+type CornerPosition = typeof VALID_CORNERS[number];
+
+/**
+ * Type guard to validate corner string
+ */
+export function isValidCorner(corner: string | undefined): corner is CornerPosition {
+    return corner !== undefined && (VALID_CORNERS as readonly string[]).includes(corner);
+}
+
 export type AnchorType = 'rect' | 'line' | 'single';
 
 export interface Anchor {
@@ -116,18 +137,12 @@ export function computeInfluenceMap(
  */
 export function loadAnchors(data: AnchorData[]): Anchor[] {
     return data.map(item => {
-        // Parse corner string to typed corner (validate it's a known value)
-        let corner: Anchor['corner'];
-        if (item.corner === 'tl' || item.corner === 'tr' || item.corner === 'bl' || item.corner === 'br') {
-            corner = item.corner;
-        }
-
         return {
             x: parseFloat(item.x),
             y: parseFloat(item.y),
             type: item.type ?? 'rect',
             groupId: item.groupId ?? item.rectId ?? 0,
-            corner,
+            corner: isValidCorner(item.corner) ? item.corner : undefined,
             position: item.position,
         };
     });
