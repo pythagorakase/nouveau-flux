@@ -616,17 +616,22 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                 // Stretch edge drag - update stretch config
                 const edge = dragState.stretchEdge;
 
+                const MIN_ZONE_SIZE = 5; // Minimum gap between edges
+
                 if (edge.startsWith('x-')) {
                     // X axis (horizontal zone) - vertical lines move horizontally
                     const newValue = dragState.startStretchValue + dx;
-                    const clampedValue = Math.max(0, Math.min(viewBox.width, newValue));
 
                     if (edge === 'x-left') {
+                        // Left edge can't go past right edge minus minimum gap
+                        const clampedValue = Math.max(0, Math.min(stretchConfig.x.rightEdge - MIN_ZONE_SIZE, newValue));
                         onStretchConfigChange({
                             ...stretchConfig,
                             x: { ...stretchConfig.x, leftEdge: clampedValue }
                         });
                     } else {
+                        // Right edge can't go past left edge plus minimum gap
+                        const clampedValue = Math.max(stretchConfig.x.leftEdge + MIN_ZONE_SIZE, Math.min(viewBox.width, newValue));
                         onStretchConfigChange({
                             ...stretchConfig,
                             x: { ...stretchConfig.x, rightEdge: clampedValue }
@@ -635,14 +640,17 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                 } else {
                     // Y axis (vertical zone) - horizontal lines move vertically
                     const newValue = dragState.startStretchValue + dy;
-                    const clampedValue = Math.max(0, Math.min(viewBox.height, newValue));
 
                     if (edge === 'y-top') {
+                        // Top edge can't go past bottom edge minus minimum gap
+                        const clampedValue = Math.max(0, Math.min(stretchConfig.y.bottomEdge - MIN_ZONE_SIZE, newValue));
                         onStretchConfigChange({
                             ...stretchConfig,
                             y: { ...stretchConfig.y, topEdge: clampedValue }
                         });
                     } else {
+                        // Bottom edge can't go past top edge plus minimum gap
+                        const clampedValue = Math.max(stretchConfig.y.topEdge + MIN_ZONE_SIZE, Math.min(viewBox.height, newValue));
                         onStretchConfigChange({
                             ...stretchConfig,
                             y: { ...stretchConfig.y, bottomEdge: clampedValue }
