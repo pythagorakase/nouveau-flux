@@ -13,13 +13,13 @@ npm run preview   # Preview production build
 
 ## Architecture
 
-This is a React + TypeScript + Vite application that renders an animated Art Nouveau SVG frame with a "psychedelic drift" effect using Canvas 2D.
+This is a React + TypeScript + Vite + Tailwind application that renders an animated Art Nouveau SVG frame with a "psychedelic drift" effect using Canvas 2D.
 
 ### Animation Pipeline
 
 1. **Path Parsing** (`src/lib/pathParser.ts`) - Converts SVG path `d` attributes into typed arrays, handling M/L/C/S/Q/H/V/Z commands with absolute coordinate conversion
 
-2. **Anchor Influence** (`src/lib/anchorInfluence.ts`) - 16 anchor points (from `corners.json`) define pinned regions. Uses quintic smoothstep (`6t⁵ - 15t⁴ + 10t³`) to compute influence falloff: 0 at anchors (fixed), 1 far away (free to move)
+2. **Anchor Influence** (`src/lib/anchorInfluence.ts`) - Anchor points (from `corners.json`) define pinned regions. Uses quintic smoothstep (`6t⁵ - 15t⁴ + 10t³`) to compute influence falloff: 0 at anchors (fixed), 1 far away (free to move)
 
 3. **Noise Engine** (`src/lib/noiseEngine.ts`) - 3D Perlin noise with FBM (fractal Brownian motion). Key technique: **domain warping** - distorts input coordinates with noise before sampling to create organic flowing movement
 
@@ -27,33 +27,52 @@ This is a React + TypeScript + Vite application that renders an animated Art Nou
 
 ### Key Components
 
-- `AnimatedFrame.tsx` - React wrapper with Leva controls panel for tweaking animation parameters (speed, intensity, warpStrength, falloffRadius, octaves)
-- `AnchorPicker.tsx` - Development tool for creating anchor points in `corners.json`
+- `App.tsx` - Main app layout with Navbar, Canvas viewport (with zoom/pan), and ControlPanel sidebar
+- `AnimatedFrame.tsx` - Core canvas component, accepts `params` prop for animation control
+- `ControlPanel.tsx` - shadcn/ui-based control panel for animation parameters and anchor management
+- `Navbar.tsx` - Top navigation bar with File menu (Import SVG) and View menu (zoom controls)
+- `AnchorPicker.tsx` - Development tool for creating anchor points in `corners.json` (uses Leva)
+
+### UI Stack
+
+- **Tailwind CSS v4** with `@tailwindcss/vite` plugin
+- **shadcn/ui** components (Radix UI primitives)
+- Custom control components: `SliderControl`, `NumberStepper`
 
 ## Library Usage
 
 Build with `npm run build:lib` to create a distributable library. Use in another React project:
 
 ```tsx
-import { AnimatedFrame } from './nouveau-flux';
+import { AnimatedFrame } from 'nouveau-flux';
+import { DEFAULT_PARAMS } from 'nouveau-flux/lib/frameAnimator';
 
-<AnimatedFrame
-  svgPath="/my-frame.svg"
-  anchorsData={myAnchors}
-  width={600}
-  style={{
-    fill: '#333',
-    // or gradient:
-    gradient: {
-      type: 'linear',
-      angle: 45,
-      stops: [
-        { offset: 0, color: '#ff0000' },
-        { offset: 1, color: '#0000ff' }
-      ]
-    }
-  }}
-/>
+function MyComponent() {
+  const [params, setParams] = useState({ ...DEFAULT_PARAMS });
+
+  return (
+    <AnimatedFrame
+      svgPath="/my-frame.svg"
+      anchorsData={myAnchors}
+      params={params}
+      width={600}
+      style={{
+        fill: '#333',
+        // or gradient:
+        gradient: {
+          type: 'linear',
+          angle: 45,
+          stops: [
+            { offset: 0, color: '#ff0000' },
+            { offset: 1, color: '#0000ff' }
+          ]
+        }
+      }}
+    />
+  );
+}
 ```
 
-Peer dependencies: `react`, `react-dom`, `leva`
+Peer dependencies: `react`, `react-dom`
+
+Optional: `leva` (only needed if using `AnchorPicker` development tool)

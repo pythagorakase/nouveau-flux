@@ -236,3 +236,34 @@ export function parseTransform(transform: string): { tx: number; ty: number } {
     }
     return { tx: 0, ty: 0 };
 }
+
+// Command type constants for buildPathString
+const CMD_NAMES = ['M', 'L', 'C', 'S', 'Q', 'Z'];
+const CMD_COORDS = [2, 2, 6, 4, 4, 0]; // Number of coordinates per command
+
+/**
+ * Convert a ParsedPath back to an SVG path string
+ * Used for preview rendering of transformed paths
+ */
+export function buildPathString(parsed: ParsedPath): string {
+    const parts: string[] = [];
+    let coordIdx = 0;
+
+    for (let i = 0; i < parsed.totalCommands; i++) {
+        const cmd = parsed.commands[i];
+        const cmdName = CMD_NAMES[cmd];
+        const numCoords = CMD_COORDS[cmd];
+
+        if (numCoords === 0) {
+            parts.push(cmdName);
+        } else {
+            const coords: number[] = [];
+            for (let j = 0; j < numCoords; j++) {
+                coords.push(parsed.coords[coordIdx++]);
+            }
+            parts.push(`${cmdName}${coords.map(c => c.toFixed(2)).join(',')}`);
+        }
+    }
+
+    return parts.join(' ');
+}
