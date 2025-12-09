@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start development server (Vite)
-npm run build    # TypeScript compile + Vite production build
-npm run preview  # Preview production build
+npm run dev       # Start development server (Vite)
+npm run build     # TypeScript compile + Vite production build
+npm run build:lib # Build as library for use in other projects
+npm run preview   # Preview production build
 ```
 
 ## Architecture
@@ -28,3 +29,31 @@ This is a React + TypeScript + Vite application that renders an animated Art Nou
 
 - `AnimatedFrame.tsx` - React wrapper with Leva controls panel for tweaking animation parameters (speed, intensity, warpStrength, falloffRadius, octaves)
 - `AnchorPicker.tsx` - Development tool for creating anchor points in `corners.json`
+
+## Library Usage
+
+Build with `npm run build:lib` to create a distributable library. Use in another React project:
+
+```tsx
+import { AnimatedFrame } from './nouveau-flux';
+
+<AnimatedFrame
+  svgPath="/my-frame.svg"
+  anchorsData={myAnchors}
+  width={600}
+  style={{
+    fill: '#333',
+    // or gradient:
+    gradient: {
+      type: 'linear',
+      angle: 45,
+      stops: [
+        { offset: 0, color: '#ff0000' },
+        { offset: 1, color: '#0000ff' }
+      ]
+    }
+  }}
+/>
+```
+
+Peer dependencies: `react`, `react-dom`, `leva`

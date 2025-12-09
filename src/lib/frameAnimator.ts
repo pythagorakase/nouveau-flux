@@ -1,7 +1,20 @@
 // Frame Animator - core animation class that runs outside React
 
-import { ParsedPath, pathToString } from './pathParser';
+import { ParsedPath } from './pathParser';
 import { NoiseEngine } from './noiseEngine';
+
+export interface GradientStop {
+    offset: number; // 0-1
+    color: string;
+}
+
+export interface GradientConfig {
+    type: 'linear' | 'radial';
+    stops: GradientStop[];
+    angle?: number; // For linear: degrees (0 = left-to-right)
+    cx?: number;    // For radial: center x (0-1)
+    cy?: number;    // For radial: center y (0-1)
+}
 
 export interface AnimationParams {
     speed: number;
@@ -26,6 +39,9 @@ export const DEFAULT_PARAMS: AnimationParams = {
     breathingAmount: 0.5,
     falloffRadius: 25,
 };
+
+// Maximum delta time to prevent large jumps after tab becomes active
+const MAX_DELTA_TIME = 1 / 30; // ~33ms, equivalent to 30fps
 
 export class FrameAnimator {
     // Pre-allocated buffers
@@ -59,8 +75,9 @@ export class FrameAnimator {
     // Transform offset from SVG
     private transformOffset: { tx: number; ty: number } = { tx: 0, ty: 0 };
 
-    // Fill color
+    // Fill style
     private fillColor: string = '#000000';
+    private gradientConfig: GradientConfig | null = null;
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -93,6 +110,11 @@ export class FrameAnimator {
 
     setFillColor(color: string): void {
         this.fillColor = color;
+        this.gradientConfig = null; // Clear gradient when setting solid color
+    }
+
+    setGradient(config: GradientConfig): void {
+        this.gradientConfig = config;
     }
 
     setInfluence(influence: Float32Array): void {
@@ -123,7 +145,7 @@ export class FrameAnimator {
         if (!this.running) return;
 
         // Calculate delta time
-        const dt = Math.min((timestamp - this.lastTimestamp) / 1000, 0.033); // Cap at ~30fps equivalent
+        const dt = Math.min((timestamp - this.lastTimestamp) / 1000, MAX_DELTA_TIME);
         this.lastTimestamp = timestamp;
         this.time += dt * this.params.speed;
 
@@ -175,6 +197,52 @@ export class FrameAnimator {
         }
     }
 
+    private createGradient(): CanvasGradient | null {
+        if (!this.gradientConfig) return null;
+
+        const ctx = this.ctx;
+        const { type, stops, angle = 0, cx = 0.5, cy = 0.5 } = this.gradientConfig;
+        const vbW = this.viewBox.width;
+        const vbH = this.viewBox.height;
+
+        let gradient: CanvasGradient;
+
+        if (type === 'linear') {
+            // Convert angle to gradient line coordinates
+            // 0° = left-to-right, 90° = top-to-bottom, etc.
+            const rad = (angle * Math.PI) / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+
+            // Calculate start and end points in viewBox coordinates
+            const centerX = vbW / 2;
+            const centerY = vbH / 2;
+            // Use diagonal length for full coverage at any angle
+            const length = Math.sqrt(vbW * vbW + vbH * vbH);
+
+            const x0 = centerX - cos * length / 2;
+            const y0 = centerY - sin * length / 2;
+            const x1 = centerX + cos * length / 2;
+            const y1 = centerY + sin * length / 2;
+
+            gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+        } else {
+            // Radial gradient
+            const centerX = cx * vbW;
+            const centerY = cy * vbH;
+            const radius = Math.max(vbW, vbH) / 2;
+
+            gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+        }
+
+        // Add color stops
+        for (const stop of stops) {
+            gradient.addColorStop(stop.offset, stop.color);
+        }
+
+        return gradient;
+    }
+
     private draw(): void {
         const ctx = this.ctx;
         const scaleX = this.width / this.viewBox.width;
@@ -190,7 +258,9 @@ export class FrameAnimator {
         // Create Path2D from animated coordinates (transform already applied during parsing)
         const path = this.buildPath();
 
-        ctx.fillStyle = this.fillColor;
+        // Use gradient if configured, otherwise solid color
+        const gradient = this.createGradient();
+        ctx.fillStyle = gradient || this.fillColor;
         ctx.fill(path);
 
         ctx.restore();

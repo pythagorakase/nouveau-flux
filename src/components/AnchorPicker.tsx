@@ -22,10 +22,15 @@ interface AnchorPickerProps {
     svgPath: string;
 }
 
-const COLORS = [
-    '#e63946', '#2a9d8f', '#e9c46a', '#8338ec',
-    '#f77f00', '#06d6a0', '#3a86ff', '#ff006e',
-];
+// Generate colors using HSL for any number of rectangles
+const generateColor = (index: number): string => {
+    // Use golden angle for optimal color distribution
+    const hue = (index * 137.5) % 360;
+    return `hsl(${hue}, 70%, 55%)`;
+};
+
+// Pre-generated colors for first 16 rectangles (fallback to generation for more)
+const COLORS = Array.from({ length: 16 }, (_, i) => generateColor(i));
 
 export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +42,12 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
+    // Coordinates panel state
+    const [coordsPanelPos, setCoordsPanelPos] = useState({ x: 0, y: 0 }); // offset from default position
+    const [coordsPanelCollapsed, setCoordsPanelCollapsed] = useState(false);
+    const [isDraggingPanel, setIsDraggingPanel] = useState(false);
+    const [panelDragStart, setPanelDragStart] = useState({ x: 0, y: 0 });
 
     // Rectangle state
     const [rectangles, setRectangles] = useState<Rectangle[]>(() =>
@@ -220,6 +231,15 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
 
     // Handle mouse move
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        // Handle panel dragging
+        if (isDraggingPanel) {
+            setCoordsPanelPos({
+                x: e.clientX - panelDragStart.x,
+                y: e.clientY - panelDragStart.y,
+            });
+            return;
+        }
+
         if (isPanning) {
             setPan({
                 x: e.clientX - panStart.x,
@@ -282,13 +302,17 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
 
             return rect;
         }));
-    }, [isPanning, panStart, dragMode, mouseToNormalized]);
+    }, [isPanning, panStart, dragMode, mouseToNormalized, isDraggingPanel, panelDragStart]);
 
     // Handle mouse up
     const handleMouseUp = useCallback(() => {
         setIsPanning(false);
         setDragMode(null);
+        setIsDraggingPanel(false);
     }, []);
+
+    // Determine if any drag is active
+    const isAnyDragActive = isPanning || isDraggingPanel || dragMode !== null;
 
     return (
         <div
@@ -307,6 +331,19 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
         >
+            {/* Drag overlay - captures all mouse events during drag to prevent Leva interference */}
+            {isAnyDragActive && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 9999,
+                        cursor: isPanning || isDraggingPanel ? 'grabbing' : 'move',
+                    }}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                />
+            )}
             {/* Instructions */}
             <div style={{
                 position: 'absolute',
@@ -336,43 +373,87 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
                 Zoom: {(zoom * 100).toFixed(0)}% | Anchors: {rectangles.length * 4}
             </div>
 
-            {/* All rectangle coordinates */}
-            <div style={{
-                position: 'absolute',
-                bottom: 10,
-                right: 240,
-                color: '#aaa',
-                fontSize: 10,
-                zIndex: 100,
-                pointerEvents: 'none',
-                background: 'rgba(0,0,0,0.8)',
-                padding: '8px 12px',
-                borderRadius: 4,
-                fontFamily: 'monospace',
-                maxHeight: '60vh',
-                overflowY: 'auto',
-            }}>
-                {rectangles.map(rect => {
-                    const tl = { x: (rect.x * svgViewBox.width).toFixed(4), y: (rect.y * svgViewBox.height).toFixed(4) };
-                    const tr = { x: ((rect.x + rect.width) * svgViewBox.width).toFixed(4), y: (rect.y * svgViewBox.height).toFixed(4) };
-                    const bl = { x: (rect.x * svgViewBox.width).toFixed(4), y: ((rect.y + rect.height) * svgViewBox.height).toFixed(4) };
-                    const br = { x: ((rect.x + rect.width) * svgViewBox.width).toFixed(4), y: ((rect.y + rect.height) * svgViewBox.height).toFixed(4) };
-                    const isSelected = selectedRect === rect.id;
-                    return (
-                        <div key={rect.id} style={{
-                            marginBottom: 8,
-                            opacity: isSelected ? 1 : 0.7,
-                            borderLeft: isSelected ? `3px solid ${rect.color}` : '3px solid transparent',
-                            paddingLeft: 6,
-                        }}>
-                            <div style={{ color: rect.color, fontWeight: 'bold' }}>Rect {rect.id + 1}</div>
-                            <div>TL: ({tl.x}, {tl.y})</div>
-                            <div>TR: ({tr.x}, {tr.y})</div>
-                            <div>BL: ({bl.x}, {bl.y})</div>
-                            <div>BR: ({br.x}, {br.y})</div>
-                        </div>
-                    );
-                })}
+            {/* All rectangle coordinates - draggable & collapsable panel */}
+            <div
+                style={{
+                    position: 'absolute',
+                    bottom: 10 + coordsPanelPos.y,
+                    right: 240 - coordsPanelPos.x,
+                    color: '#aaa',
+                    fontSize: 10,
+                    zIndex: 100,
+                    background: 'rgba(0,0,0,0.8)',
+                    borderRadius: 4,
+                    fontFamily: 'monospace',
+                    maxHeight: coordsPanelCollapsed ? 'auto' : '60vh',
+                    overflow: 'hidden',
+                    userSelect: 'none',
+                }}
+            >
+                {/* Panel header - draggable */}
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: 'rgba(255,255,255,0.1)',
+                        cursor: 'move',
+                        borderBottom: coordsPanelCollapsed ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                    }}
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setIsDraggingPanel(true);
+                        setPanelDragStart({
+                            x: e.clientX - coordsPanelPos.x,
+                            y: e.clientY - coordsPanelPos.y,
+                        });
+                    }}
+                >
+                    <span style={{ fontWeight: 'bold', color: '#fff' }}>Coordinates</span>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setCoordsPanelCollapsed(!coordsPanelCollapsed);
+                        }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#888',
+                            cursor: 'pointer',
+                            fontSize: 14,
+                            padding: '0 4px',
+                        }}
+                    >
+                        {coordsPanelCollapsed ? '▼' : '▲'}
+                    </button>
+                </div>
+                {/* Panel content */}
+                {!coordsPanelCollapsed && (
+                    <div style={{ padding: '8px 12px', overflowY: 'auto', maxHeight: 'calc(60vh - 30px)' }}>
+                        {rectangles.map(rect => {
+                            const tl = { x: (rect.x * svgViewBox.width).toFixed(4), y: (rect.y * svgViewBox.height).toFixed(4) };
+                            const tr = { x: ((rect.x + rect.width) * svgViewBox.width).toFixed(4), y: (rect.y * svgViewBox.height).toFixed(4) };
+                            const bl = { x: (rect.x * svgViewBox.width).toFixed(4), y: ((rect.y + rect.height) * svgViewBox.height).toFixed(4) };
+                            const br = { x: ((rect.x + rect.width) * svgViewBox.width).toFixed(4), y: ((rect.y + rect.height) * svgViewBox.height).toFixed(4) };
+                            const isSelected = selectedRect === rect.id;
+                            return (
+                                <div key={rect.id} style={{
+                                    marginBottom: 8,
+                                    opacity: isSelected ? 1 : 0.7,
+                                    borderLeft: isSelected ? `3px solid ${rect.color}` : '3px solid transparent',
+                                    paddingLeft: 6,
+                                }}>
+                                    <div style={{ color: rect.color, fontWeight: 'bold' }}>Rect {rect.id + 1}</div>
+                                    <div>TL: ({tl.x}, {tl.y})</div>
+                                    <div>TR: ({tr.x}, {tr.y})</div>
+                                    <div>BL: ({bl.x}, {bl.y})</div>
+                                    <div>BR: ({br.x}, {br.y})</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* SVG Container */}
@@ -416,6 +497,7 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
                     const w = rect.width * baseWidth;
                     const h = rect.height * baseHeight;
                     const isSelected = selectedRect === rect.id;
+                    const isDragging = dragMode?.rectId === rect.id;
                     const hs = handleSize / zoom; // Handle size adjusted for zoom
 
                     return (
@@ -434,6 +516,7 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
                                     background: isSelected ? `${rect.color}15` : 'transparent',
                                     cursor: 'move',
                                     boxSizing: 'border-box',
+                                    zIndex: isDragging ? 10000 : (isSelected ? 100 : 10),
                                 }}
                             />
 
