@@ -95,6 +95,9 @@ export class FrameAnimator {
     // Transform offset from SVG
     private transformOffset: { tx: number; ty: number } = { tx: 0, ty: 0 };
 
+    // Margin offset for centering path in extended canvas
+    private marginOffset: { x: number; y: number } = { x: 0, y: 0 };
+
     // Fill style
     private fillColor: string = '#000000';
     private gradientConfig: GradientConfig | null = null;
@@ -102,9 +105,12 @@ export class FrameAnimator {
     constructor(
         canvas: HTMLCanvasElement,
         parsedPath: ParsedPath,
-        influence: Float32Array,
         viewBox: { width: number; height: number },
-        transformOffset: { tx: number; ty: number } = { tx: 0, ty: 0 }
+        options?: {
+            offsetX?: number;      // Margin offset in viewBox coords
+            offsetY?: number;
+            transformOffset?: { tx: number; ty: number };
+        }
     ) {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Could not get 2d context');
@@ -114,12 +120,16 @@ export class FrameAnimator {
         this.height = canvas.height;
         this.parsedPath = parsedPath;
         this.viewBox = viewBox;
-        this.transformOffset = transformOffset;
+        this.transformOffset = options?.transformOffset ?? { tx: 0, ty: 0 };
+        this.marginOffset = {
+            x: options?.offsetX ?? 0,
+            y: options?.offsetY ?? 0,
+        };
 
         // Clone the coordinates for base reference
         this.baseCoords = new Float32Array(parsedPath.coords);
         this.animatedCoords = new Float32Array(parsedPath.coords.length);
-        this.influence = influence;
+        this.influence = new Float32Array(parsedPath.coords.length / 2);
 
         this.noise = new NoiseEngine(12345);
     }
@@ -310,6 +320,9 @@ export class FrameAnimator {
         // Build and draw path
         ctx.save();
         ctx.scale(scaleX, scaleY);
+
+        // Apply margin offset to center the path in the extended canvas
+        ctx.translate(this.marginOffset.x, this.marginOffset.y);
 
         // Create Path2D from animated coordinates (transform already applied during parsing)
         const path = this.buildPath();
