@@ -272,9 +272,10 @@ const AnimatedFrameCore: React.FC<{
 
                 const transformOffset = parseTransform(extracted.transform);
                 const parsedPath = parsePath(extracted.d, transformOffset);
+                const stretchedCoords = applyStretchConfig(parsedPath.coords, stretchConfig ?? null);
                 const anchors = loadAnchors(anchorsData);
                 const influence = computeInfluenceMap(
-                    parsedPath.coords,
+                    stretchedCoords,
                     anchors,
                     params.falloffRadius,
                     transformOffset
@@ -284,7 +285,7 @@ const AnimatedFrameCore: React.FC<{
                 setError(err instanceof Error ? err.message : 'Error recomputing influence');
             }
         })();
-    }, [params.falloffRadius, svgPath, anchorsData]);
+    }, [params.falloffRadius, svgPath, anchorsData, stretchConfig]);
 
     // Update style when it changes
     useEffect(() => {
