@@ -2,6 +2,21 @@
   "name": "nouveau-flux",
   "private": true,
   "version": "0.1.0",
+  "description": "Animated Art Nouveau SVG frame with psychedelic drift effect",
+  "author": "pythagorakase",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pythagorakase/nouveau-flux.git"
+  },
+  "keywords": [
+    "art-nouveau",
+    "animation",
+    "svg",
+    "canvas",
+    "psychedelic",
+    "react"
+  ],
   "type": "module",
   "main": "./dist/nouveau-flux.umd.cjs",
   "module": "./dist/nouveau-flux.js",

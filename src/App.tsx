@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AnimatedFrame } from './components/AnimatedFrame';
 import anchorsData from '../corners.json';
 
@@ -6,13 +6,29 @@ function App() {
     const [svgPath, setSvgPath] = useState('/button_card_2.svg');
     const [svgName, setSvgName] = useState('button_card_2.svg');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const prevBlobUrlRef = useRef<string | null>(null);
+
+    // Clean up blob URLs to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (prevBlobUrlRef.current) {
+                URL.revokeObjectURL(prevBlobUrlRef.current);
+            }
+        };
+    }, []);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Revoke previous blob URL if it exists
+        if (prevBlobUrlRef.current) {
+            URL.revokeObjectURL(prevBlobUrlRef.current);
+        }
+
         // Create a blob URL for the uploaded file
         const blobUrl = URL.createObjectURL(file);
+        prevBlobUrlRef.current = blobUrl;
         setSvgPath(blobUrl);
         setSvgName(file.name);
     };

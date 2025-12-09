@@ -2,24 +2,13 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useControls, folder, Leva } from 'leva';
 import { parsePath, extractPathFromSvg, parseTransform } from '../lib/pathParser';
 import { computeInfluenceMap, loadAnchors, Anchor } from '../lib/anchorInfluence';
-import { FrameAnimator, DEFAULT_PARAMS } from '../lib/frameAnimator';
+import { FrameAnimator, DEFAULT_PARAMS, GradientStop, GradientConfig } from '../lib/frameAnimator';
 
-export interface GradientStop {
-    offset: number; // 0-1
-    color: string;
-}
+export type { GradientStop };
 
 export interface StyleConfig {
     fill?: string;
-    gradient?: {
-        type: 'linear' | 'radial';
-        stops: GradientStop[];
-        // For linear: angle in degrees (0 = left-to-right)
-        angle?: number;
-        // For radial: center position (0-1)
-        cx?: number;
-        cy?: number;
-    };
+    gradient?: GradientConfig;
 }
 
 export interface AnimatedFrameProps {
@@ -65,7 +54,6 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
         }),
         Anchors: folder({
             falloffRadius: { value: mergedDefaults.falloffRadius, min: 5, max: 60, step: 1 },
-            showAnchors: { value: false },
         }),
     });
 
@@ -141,11 +129,6 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
                     animator.setFillColor(style.fill);
                 }
 
-                // Store anchors and transform for debug drawing
-                (animator as any)._anchors = anchors;
-                (animator as any)._transformOffset = transformOffset;
-                (animator as any)._canvas = canvas; // Store for gradient creation
-
                 animatorRef.current = animator;
                 animator.start();
 
@@ -208,7 +191,7 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
 
                 animator.setInfluence(influence);
             } catch (err) {
-                console.error('Error recomputing influence:', err);
+                setError(err instanceof Error ? err.message : 'Error recomputing influence');
             }
         })();
     }, [params.falloffRadius, svgPath, anchorsData]);
@@ -224,19 +207,6 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
             animator.setFillColor(style.fill);
         }
     }, [style?.fill, style?.gradient]);
-
-    // Draw anchors overlay when showAnchors is true
-    useEffect(() => {
-        const animator = animatorRef.current as any;
-        if (!animator || !params.showAnchors) return;
-
-        const anchors = animator._anchors;
-        const transformOffset = animator._transformOffset;
-        if (anchors && transformOffset) {
-            // This will be drawn each frame by the animator
-            // For now, just log that we want to show anchors
-        }
-    }, [params.showAnchors]);
 
     if (error) {
         return (
@@ -258,6 +228,7 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
 
     return (
         <div style={{ position: 'relative', width, height }}>
+            <Leva hidden={!showControls} />
             <canvas
                 ref={canvasRef}
                 style={{

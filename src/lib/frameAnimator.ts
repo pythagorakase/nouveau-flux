@@ -40,6 +40,9 @@ export const DEFAULT_PARAMS: AnimationParams = {
     falloffRadius: 25,
 };
 
+// Maximum delta time to prevent large jumps after tab becomes active
+const MAX_DELTA_TIME = 1 / 30; // ~33ms, equivalent to 30fps
+
 export class FrameAnimator {
     // Pre-allocated buffers
     private baseCoords: Float32Array;
@@ -142,7 +145,7 @@ export class FrameAnimator {
         if (!this.running) return;
 
         // Calculate delta time
-        const dt = Math.min((timestamp - this.lastTimestamp) / 1000, 0.033); // Cap at ~30fps equivalent
+        const dt = Math.min((timestamp - this.lastTimestamp) / 1000, MAX_DELTA_TIME);
         this.lastTimestamp = timestamp;
         this.time += dt * this.params.speed;
 
@@ -214,7 +217,8 @@ export class FrameAnimator {
             // Calculate start and end points in viewBox coordinates
             const centerX = vbW / 2;
             const centerY = vbH / 2;
-            const length = Math.max(vbW, vbH);
+            // Use diagonal length for full coverage at any angle
+            const length = Math.sqrt(vbW * vbW + vbH * vbH);
 
             const x0 = centerX - cos * length / 2;
             const y0 = centerY - sin * length / 2;

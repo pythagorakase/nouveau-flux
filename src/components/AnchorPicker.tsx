@@ -22,10 +22,15 @@ interface AnchorPickerProps {
     svgPath: string;
 }
 
-const COLORS = [
-    '#e63946', '#2a9d8f', '#e9c46a', '#8338ec',
-    '#f77f00', '#06d6a0', '#3a86ff', '#ff006e',
-];
+// Generate colors using HSL for any number of rectangles
+const generateColor = (index: number): string => {
+    // Use golden angle for optimal color distribution
+    const hue = (index * 137.5) % 360;
+    return `hsl(${hue}, 70%, 55%)`;
+};
+
+// Pre-generated colors for first 16 rectangles (fallback to generation for more)
+const COLORS = Array.from({ length: 16 }, (_, i) => generateColor(i));
 
 export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
     const containerRef = useRef<HTMLDivElement>(null);
