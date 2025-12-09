@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useControls, folder, Leva } from 'leva';
 import { parsePath, extractPathFromSvg, parseTransform } from '../lib/pathParser';
 import { computeInfluenceMap, loadAnchors, Anchor } from '../lib/anchorInfluence';
-import { FrameAnimator, DEFAULT_PARAMS, GradientStop, GradientConfig } from '../lib/frameAnimator';
+import { FrameAnimator, DEFAULT_PARAMS, GradientStop, GradientConfig, MotionType } from '../lib/frameAnimator';
 
 export type { GradientStop };
 
@@ -41,16 +41,28 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
     }), [defaultParams]);
 
     // Leva controls for real-time parameter tweaking
-    const params = useControls('Psychedelic Drift', {
+    const params = useControls('Animation', {
+        motionType: {
+            value: mergedDefaults.motionType,
+            options: { 'Psychedelic': 'psychedelic', 'Eldritch': 'eldritch' } as Record<string, MotionType>,
+            label: 'Motion Style'
+        },
         Motion: folder({
             speed: { value: mergedDefaults.speed, min: 0, max: 1, step: 0.05 },
             intensity: { value: mergedDefaults.intensity, min: 0, max: 15, step: 0.5 },
+        }),
+        'Psychedelic Settings': folder({
             breathingAmount: { value: mergedDefaults.breathingAmount, min: 0, max: 2, step: 0.1 },
+            warpStrength: { value: mergedDefaults.warpStrength, min: 0, max: 40, step: 1 },
+        }),
+        'Eldritch Settings': folder({
+            writheSpeed: { value: mergedDefaults.writheSpeed, min: 0.1, max: 3, step: 0.1, label: 'Writhe Speed' },
+            writheIntensity: { value: mergedDefaults.writheIntensity, min: 0, max: 2, step: 0.1, label: 'Writhe Intensity' },
+            coilTightness: { value: mergedDefaults.coilTightness, min: 0, max: 2, step: 0.1, label: 'Coil Tightness' },
         }),
         Noise: folder({
             noiseScale: { value: mergedDefaults.noiseScale, min: 0.001, max: 0.05, step: 0.001 },
             octaves: { value: mergedDefaults.octaves, min: 1, max: 6, step: 1 },
-            warpStrength: { value: mergedDefaults.warpStrength, min: 0, max: 40, step: 1 },
         }),
         Anchors: folder({
             falloffRadius: { value: mergedDefaults.falloffRadius, min: 5, max: 60, step: 1 },
@@ -155,15 +167,34 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
         if (!animator) return;
 
         animator.setParams({
+            motionType: params.motionType,
             speed: params.speed,
             intensity: params.intensity,
+            // Psychedelic params
             breathingAmount: params.breathingAmount,
+            warpStrength: params.warpStrength,
+            // Eldritch params
+            writheSpeed: params.writheSpeed,
+            writheIntensity: params.writheIntensity,
+            coilTightness: params.coilTightness,
+            // Noise params
             noiseScale: params.noiseScale,
             octaves: params.octaves,
-            warpStrength: params.warpStrength,
             falloffRadius: params.falloffRadius,
         });
-    }, [params.speed, params.intensity, params.breathingAmount, params.noiseScale, params.octaves, params.warpStrength, params.falloffRadius]);
+    }, [
+        params.motionType,
+        params.speed,
+        params.intensity,
+        params.breathingAmount,
+        params.warpStrength,
+        params.writheSpeed,
+        params.writheIntensity,
+        params.coilTightness,
+        params.noiseScale,
+        params.octaves,
+        params.falloffRadius
+    ]);
 
     // Recompute influence when falloff changes
     useEffect(() => {

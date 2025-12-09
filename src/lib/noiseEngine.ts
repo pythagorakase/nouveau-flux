@@ -202,6 +202,92 @@ export class NoiseEngine {
         return { dx, dy };
     }
 
+    // Eldritch tentacle displacement - writhing, directional, coiling motion
+    // Creates organic tentacle-like movement with wave propagation
+    eldritchDisplacement(
+        x: number,
+        y: number,
+        time: number,
+        params: {
+            noiseScale: number;
+            octaves: number;
+            persistence: number;
+            lacunarity: number;
+            writheSpeed: number;
+            writheIntensity: number;
+            coilTightness: number;
+        }
+    ): { dx: number; dy: number } {
+        const { noiseScale, octaves, persistence, lacunarity, writheSpeed, writheIntensity, coilTightness } = params;
+
+        // Use position to create wave propagation direction
+        // Points further from origin have phase delay - creates "traveling wave"
+        const distFromOrigin = Math.sqrt(x * x + y * y);
+        const angle = Math.atan2(y, x);
+
+        // Layer 1: Primary writhing wave - fast sinusoidal with noise modulation
+        // The phase offset by distance creates the "tentacle propagation" effect
+        const phaseOffset = distFromOrigin * noiseScale * 3;
+        const writheBase = Math.sin(time * writheSpeed * 4 - phaseOffset);
+
+        // Modulate writhe amplitude with noise for organic irregularity
+        const writheModulation = this.fbm(
+            x * noiseScale * 2,
+            y * noiseScale * 2,
+            time * 0.5,
+            2,
+            0.6,
+            2
+        );
+        const writhe = writheBase * (0.5 + writheModulation * 0.5) * writheIntensity;
+
+        // Layer 2: Coiling rotation - spiral motion around local axis
+        // Creates the "corkscrew" tentacle movement
+        const coilPhase = time * writheSpeed * 2.5 - phaseOffset * 0.7;
+        const coilRadius = this.noise3D(
+            x * noiseScale,
+            y * noiseScale,
+            time * 0.8
+        ) * coilTightness;
+
+        const coilDx = Math.cos(coilPhase + angle) * coilRadius;
+        const coilDy = Math.sin(coilPhase + angle) * coilRadius;
+
+        // Layer 3: Secondary undulation - faster, smaller tremors
+        // Gives the "living flesh" quiver effect
+        const tremor = this.fbm(
+            x * noiseScale * 4,
+            y * noiseScale * 4,
+            time * writheSpeed * 3,
+            octaves,
+            persistence,
+            lacunarity
+        );
+        const tremorDx = tremor * 0.3;
+        const tremorDy = this.fbm(
+            x * noiseScale * 4 + 100,
+            y * noiseScale * 4,
+            time * writheSpeed * 3.2,
+            octaves,
+            persistence,
+            lacunarity
+        ) * 0.3;
+
+        // Layer 4: Slow pulsing "breathing" undertone
+        const pulse = Math.sin(time * writheSpeed * 0.5) * 0.2;
+
+        // Combine: writhe applies perpendicular to position angle,
+        // coil adds spiral, tremor adds organic noise
+        const perpAngle = angle + Math.PI / 2;
+        const writheDx = Math.cos(perpAngle) * writhe;
+        const writheDy = Math.sin(perpAngle) * writhe;
+
+        return {
+            dx: writheDx + coilDx + tremorDx + pulse,
+            dy: writheDy + coilDy + tremorDy + pulse * 0.7
+        };
+    }
+
     // Layered noise for rich psychedelic effect
     // Combines slow breathing, medium drift, and subtle shimmer
     psychedelicDisplacement(

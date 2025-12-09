@@ -3,6 +3,8 @@
 import { ParsedPath } from './pathParser';
 import { NoiseEngine } from './noiseEngine';
 
+export type MotionType = 'psychedelic' | 'eldritch';
+
 export interface GradientStop {
     offset: number; // 0-1
     color: string;
@@ -17,26 +19,40 @@ export interface GradientConfig {
 }
 
 export interface AnimationParams {
+    motionType: MotionType;
     speed: number;
     intensity: number;
     noiseScale: number;
     octaves: number;
     persistence: number;
     lacunarity: number;
+    // Psychedelic-specific
     warpStrength: number;
     breathingAmount: number;
+    // Eldritch-specific
+    writheSpeed: number;
+    writheIntensity: number;
+    coilTightness: number;
+    // Shared
     falloffRadius: number;
 }
 
 export const DEFAULT_PARAMS: AnimationParams = {
+    motionType: 'psychedelic',
     speed: 0.3,
     intensity: 3,
     noiseScale: 0.01,
     octaves: 4,
     persistence: 0.5,
     lacunarity: 2,
+    // Psychedelic defaults
     warpStrength: 15,
     breathingAmount: 0.5,
+    // Eldritch defaults
+    writheSpeed: 1.0,
+    writheIntensity: 0.8,
+    coilTightness: 0.5,
+    // Shared
     falloffRadius: 25,
 };
 
@@ -161,7 +177,19 @@ export class FrameAnimator {
 
     private updatePoints(): void {
         const numPoints = this.baseCoords.length / 2;
-        const { intensity, noiseScale, octaves, persistence, lacunarity, warpStrength, breathingAmount } = this.params;
+        const {
+            motionType,
+            intensity,
+            noiseScale,
+            octaves,
+            persistence,
+            lacunarity,
+            warpStrength,
+            breathingAmount,
+            writheSpeed,
+            writheIntensity,
+            coilTightness
+        } = this.params;
 
         for (let i = 0; i < numPoints; i++) {
             const weight = this.influence[i];
@@ -176,20 +204,40 @@ export class FrameAnimator {
             const baseX = this.baseCoords[i * 2];
             const baseY = this.baseCoords[i * 2 + 1];
 
-            // Get psychedelic displacement from noise engine
-            const displacement = this.noise.psychedelicDisplacement(
-                baseX,
-                baseY,
-                this.time,
-                {
-                    noiseScale,
-                    octaves,
-                    persistence,
-                    lacunarity,
-                    warpStrength,
-                    breathingAmount
-                }
-            );
+            // Get displacement based on motion type
+            let displacement: { dx: number; dy: number };
+
+            if (motionType === 'eldritch') {
+                displacement = this.noise.eldritchDisplacement(
+                    baseX,
+                    baseY,
+                    this.time,
+                    {
+                        noiseScale,
+                        octaves,
+                        persistence,
+                        lacunarity,
+                        writheSpeed,
+                        writheIntensity,
+                        coilTightness
+                    }
+                );
+            } else {
+                // Default: psychedelic
+                displacement = this.noise.psychedelicDisplacement(
+                    baseX,
+                    baseY,
+                    this.time,
+                    {
+                        noiseScale,
+                        octaves,
+                        persistence,
+                        lacunarity,
+                        warpStrength,
+                        breathingAmount
+                    }
+                );
+            }
 
             // Apply displacement scaled by weight and intensity
             this.animatedCoords[i * 2] = baseX + displacement.dx * weight * intensity;
