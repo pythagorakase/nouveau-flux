@@ -18,6 +18,10 @@ import { X, Square, Minus, Circle, ChevronLeft, ChevronRight } from 'lucide-reac
 
 // Snap tolerance in SVG units
 const SNAP_TOLERANCE = 3;
+// Minimum line length in SVG units (prevents degenerate zero-length lines)
+const MIN_LINE_LENGTH = 5;
+// Minimum gap between stretch zone edges in SVG units
+const MIN_ZONE_SIZE = 5;
 
 interface AnchorEditorProps {
     svgPath: string;
@@ -77,6 +81,8 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [isPanning, setIsPanning] = useState(false);
     const panStartRef = useRef({ x: 0, y: 0 });
+    // RAF throttling for mouse move performance
+    const rafIdRef = useRef<number | null>(null);
 
     // Drag state
     const [dragState, setDragState] = useState<DragState | null>(null);
@@ -218,7 +224,9 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
 
     // Load SVG and parse path for stretch preview
     useEffect(() => {
-        fetch(svgPath)
+        const controller = new AbortController();
+
+        fetch(svgPath, { signal: controller.signal })
             .then(res => res.text())
             .then(text => {
                 setSvgContent(text);
@@ -237,7 +245,14 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     setParsedPath(parsed);
                 }
             })
-            .catch(console.error);
+            .catch(err => {
+                // Ignore abort errors - they're expected on cleanup
+                if (err.name !== 'AbortError') {
+                    console.error(err);
+                }
+            });
+
+        return () => controller.abort();
     }, [svgPath]);
 
     // Keyboard shortcuts
@@ -254,6 +269,15 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose, lineStart]);
+
+    // Cleanup RAF on unmount
+    useEffect(() => {
+        return () => {
+            if (rafIdRef.current !== null) {
+                cancelAnimationFrame(rafIdRef.current);
+            }
+        };
+    }, []);
 
     // Base display size
     const baseWidth = 600;
@@ -475,6 +499,17 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
             if (!lineStart) {
                 setLineStart(svgCoords);
             } else {
+                // Check minimum line length before creating
+                const dx = svgCoords.x - lineStart.x;
+                const dy = svgCoords.y - lineStart.y;
+                const lineLength = Math.sqrt(dx * dx + dy * dy);
+
+                if (lineLength < MIN_LINE_LENGTH) {
+                    // Line too short - cancel and reset
+                    setLineStart(null);
+                    return;
+                }
+
                 // Complete line
                 const newGroupId = 100 + anchors.filter(a => a.type === 'line').length / 2;
                 onAnchorsChange([
@@ -506,9 +541,10 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
         panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     }, [anchors, editMode, lineStart, mouseToSvg, onAnchorsChange, pan, getRectCorners, getLineEndpoints, stretchConfig]);
 
-    // Handle mouse move
+    // Handle mouse move (with RAF throttling for performance)
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         if (isPanning) {
+            // Panning remains immediate for responsiveness
             setPan({
                 x: e.clientX - panStartRef.current.x,
                 y: e.clientY - panStartRef.current.y,
@@ -517,8 +553,16 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
         }
 
         if (dragState) {
-            const current = mouseToSvg(e.clientX, e.clientY);
-            const start = mouseToSvg(dragState.startMouse.x, dragState.startMouse.y);
+            // Skip if RAF already pending
+            if (rafIdRef.current !== null) return;
+
+            const clientX = e.clientX;
+            const clientY = e.clientY;
+
+            rafIdRef.current = requestAnimationFrame(() => {
+                rafIdRef.current = null;
+                const current = mouseToSvg(clientX, clientY);
+                const start = mouseToSvg(dragState.startMouse.x, dragState.startMouse.y);
             const dx = current.x - start.x;
             const dy = current.y - start.y;
 
@@ -526,8 +570,33 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
 
             if (dragState.mode === 'single') {
                 // Single anchor drag
-                const rawX = dragState.startAnchor.x + dx;
-                const rawY = dragState.startAnchor.y + dy;
+                let rawX = dragState.startAnchor.x + dx;
+                let rawY = dragState.startAnchor.y + dy;
+
+                // For line anchors, prevent dragging too close to paired endpoint
+                const anchor = anchors[dragState.anchorIndex];
+                if (anchor.type === 'line' && anchor.groupId !== undefined) {
+                    // Find the paired endpoint
+                    const pairedIdx = anchors.findIndex((a, i) =>
+                        i !== dragState.anchorIndex &&
+                        a.type === 'line' &&
+                        a.groupId === anchor.groupId
+                    );
+                    if (pairedIdx !== -1) {
+                        const paired = anchors[pairedIdx];
+                        const pairedX = parseFloat(paired.x);
+                        const pairedY = parseFloat(paired.y);
+                        const dist = Math.sqrt((rawX - pairedX) ** 2 + (rawY - pairedY) ** 2);
+
+                        if (dist < MIN_LINE_LENGTH) {
+                            // Clamp position to maintain minimum distance
+                            const angle = Math.atan2(rawY - pairedY, rawX - pairedX);
+                            rawX = pairedX + Math.cos(angle) * MIN_LINE_LENGTH;
+                            rawY = pairedY + Math.sin(angle) * MIN_LINE_LENGTH;
+                        }
+                    }
+                }
+
                 const snapped = findSnapPosition(rawX, rawY, dragState.anchorIndex);
                 setActiveGuidelines({ x: snapped.snappedX, y: snapped.snappedY });
 
@@ -616,8 +685,6 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                 // Stretch edge drag - update stretch config
                 const edge = dragState.stretchEdge;
 
-                const MIN_ZONE_SIZE = 5; // Minimum gap between edges
-
                 if (edge.startsWith('x-')) {
                     // X axis (horizontal zone) - vertical lines move horizontally
                     const newValue = dragState.startStretchValue + dx;
@@ -660,7 +727,8 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                 return; // Don't update anchors for stretch mode
             }
 
-            onAnchorsChange(newAnchors);
+                onAnchorsChange(newAnchors);
+            });
         }
     }, [isPanning, dragState, mouseToSvg, anchors, onAnchorsChange, findSnapPosition, stretchConfig, onStretchConfigChange, viewBox]);
 
@@ -669,6 +737,11 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
         setIsPanning(false);
         setDragState(null);
         setActiveGuidelines({ x: [], y: [] });
+        // Cancel pending RAF
+        if (rafIdRef.current !== null) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
     }, []);
 
     // Delete selected anchor
