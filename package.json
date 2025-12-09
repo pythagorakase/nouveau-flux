@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:lib": "vite build --mode lib && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:lib": "vite build --mode lib && tsc --emitDeclarationOnly --declaration --outDir dist --noEmit false",
     "preview": "vite preview"
   },
   "dependencies": {
