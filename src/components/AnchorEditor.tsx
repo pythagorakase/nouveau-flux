@@ -1424,26 +1424,23 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                     const color = baseColors[colorIdx];
                                     const pattern = patterns[patternIdx];
 
-                                    // Determine stroke style based on pattern
-                                    let strokeStyle: string;
+                                    // Determine fill style based on pattern
+                                    let fillStyle: string;
                                     if (pattern === 'solid') {
-                                        strokeStyle = color.stroke;
+                                        fillStyle = color.stroke;
                                     } else if (pattern === 'diagonal') {
-                                        strokeStyle = `url(#diag-${color.name})`;
+                                        fillStyle = `url(#diag-${color.name})`;
                                     } else {
-                                        strokeStyle = `url(#dots-${color.name})`;
+                                        fillStyle = `url(#dots-${color.name})`;
                                     }
 
                                     return (
                                         <path
                                             key={segIdx}
-                                            d={d}
-                                            fill="none"
-                                            stroke={strokeStyle}
-                                            strokeWidth={4}
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            opacity={0.8}
+                                            d={d + 'Z'}
+                                            fill={fillStyle}
+                                            stroke="none"
+                                            opacity={0.5}
                                         />
                                     );
                                 })}
