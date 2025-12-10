@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/collapsible';
 import { SliderControl } from './SliderControl';
 import { NumberStepper } from './NumberStepper';
-import { AnimationParams, MotionType } from '@/lib/frameAnimator';
+import { AnimationParams, MotionType, EldritchFocusParams } from '@/lib/frameAnimator';
 
 export interface AnchorCounts {
   rect: number;
@@ -71,6 +71,32 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     value: AnimationParams[K]
   ) => {
     onParamsChange({ [key]: value });
+  };
+
+  // Helper to update nested eldritchFocus params
+  const updateEldritchFocus = <K extends keyof EldritchFocusParams>(
+    key: K,
+    value: EldritchFocusParams[K]
+  ) => {
+    onParamsChange({
+      eldritchFocus: {
+        ...params.eldritchFocus,
+        [key]: value,
+      },
+    });
+  };
+
+  // Helper to update motion weights
+  const updateMotionWeight = (motion: keyof EldritchFocusParams['motionWeights'], value: number) => {
+    onParamsChange({
+      eldritchFocus: {
+        ...params.eldritchFocus,
+        motionWeights: {
+          ...params.eldritchFocus.motionWeights,
+          [motion]: value,
+        },
+      },
+    });
   };
 
   const totalAnchors = anchorCounts.rect * 4 + anchorCounts.line * 2 + anchorCounts.single;
@@ -140,82 +166,139 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           </Section>
         )}
 
-        {/* Eldritch Settings */}
+        {/* Eldritch Settings - Focus-based system */}
         {params.motionType === 'eldritch' && (
-          <Section title="Eldritch Settings">
-            <SliderControl
-              label="Writhe Speed"
-              value={params.writheSpeed}
-              min={0}
-              max={3}
-              step={0.1}
-              onChange={(v) => updateParam('writheSpeed', v)}
-            />
-            <SliderControl
-              label="Writhe Intensity"
-              value={params.writheIntensity}
-              min={0}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateParam('writheIntensity', v)}
-            />
-            <SliderControl
-              label="Coil Tightness"
-              value={params.coilTightness}
-              min={0}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateParam('coilTightness', v)}
-            />
-            <SliderControl
-              label="Tension"
-              value={params.tensionAmount}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateParam('tensionAmount', v)}
-            />
-            <SliderControl
-              label="Tremor"
-              value={params.tremorIntensity}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateParam('tremorIntensity', v)}
-            />
-            <SliderControl
-              label="Shiver"
-              value={params.shiverIntensity}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateParam('shiverIntensity', v)}
-            />
-            <SliderControl
-              label="Pulse"
-              value={params.pulseIntensity}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateParam('pulseIntensity', v)}
-            />
-            <SliderControl
-              label="Origin X"
-              value={params.eldritchOriginX}
-              min={-200}
-              max={200}
-              step={1}
-              onChange={(v) => updateParam('eldritchOriginX', v)}
-            />
-            <SliderControl
-              label="Origin Y"
-              value={params.eldritchOriginY}
-              min={-200}
-              max={200}
-              step={1}
-              onChange={(v) => updateParam('eldritchOriginY', v)}
-            />
-          </Section>
+          <>
+            <Section title="Motion Types">
+              <p className="text-xs text-muted-foreground pb-2">
+                Relative odds for each motion style
+              </p>
+              <SliderControl
+                label="Whip"
+                value={params.eldritchFocus.motionWeights.whip}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateMotionWeight('whip', v)}
+              />
+              <SliderControl
+                label="Quiver"
+                value={params.eldritchFocus.motionWeights.quiver}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateMotionWeight('quiver', v)}
+              />
+              <SliderControl
+                label="Strain"
+                value={params.eldritchFocus.motionWeights.strain}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateMotionWeight('strain', v)}
+              />
+              <SliderControl
+                label="Thrash"
+                value={params.eldritchFocus.motionWeights.thrash}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateMotionWeight('thrash', v)}
+              />
+            </Section>
+
+            <Section title="Focus Behavior" defaultOpen={false}>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <SliderControl
+                    label="Min Foci"
+                    value={params.eldritchFocus.minFoci}
+                    min={1}
+                    max={3}
+                    step={1}
+                    onChange={(v) => updateEldritchFocus('minFoci', v)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <SliderControl
+                    label="Max Foci"
+                    value={params.eldritchFocus.maxFoci}
+                    min={1}
+                    max={4}
+                    step={1}
+                    onChange={(v) => updateEldritchFocus('maxFoci', v)}
+                  />
+                </div>
+              </div>
+              <SliderControl
+                label="Burst Duration (min)"
+                value={params.eldritchFocus.focusDurationMin}
+                min={0.3}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('focusDurationMin', v)}
+              />
+              <SliderControl
+                label="Burst Duration (max)"
+                value={params.eldritchFocus.focusDurationMax}
+                min={0.5}
+                max={4}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('focusDurationMax', v)}
+              />
+              <SliderControl
+                label="Rest Duration (min)"
+                value={params.eldritchFocus.restDurationMin}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('restDurationMin', v)}
+              />
+              <SliderControl
+                label="Rest Duration (max)"
+                value={params.eldritchFocus.restDurationMax}
+                min={0.2}
+                max={3}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('restDurationMax', v)}
+              />
+            </Section>
+
+            <Section title="Propagation" defaultOpen={false}>
+              <SliderControl
+                label="Wave Speed"
+                value={params.eldritchFocus.propagationSpeed}
+                min={0.5}
+                max={5}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('propagationSpeed', v)}
+              />
+              <SliderControl
+                label="Wave Decay"
+                value={params.eldritchFocus.propagationDecay}
+                min={0.05}
+                max={0.5}
+                step={0.01}
+                onChange={(v) => updateEldritchFocus('propagationDecay', v)}
+              />
+              <SliderControl
+                label="Base Intensity"
+                value={params.eldritchFocus.baseIntensity}
+                min={0.2}
+                max={3}
+                step={0.1}
+                onChange={(v) => updateEldritchFocus('baseIntensity', v)}
+              />
+              <SliderControl
+                label="Resting Drift"
+                value={params.eldritchFocus.restingDrift}
+                min={0}
+                max={0.2}
+                step={0.01}
+                onChange={(v) => updateEldritchFocus('restingDrift', v)}
+              />
+            </Section>
+          </>
         )}
 
         {/* Vegetal (Wind) Settings */}
