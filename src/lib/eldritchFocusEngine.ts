@@ -19,6 +19,11 @@ const ANCHOR_INFLUENCE_THRESHOLD = 0.3;
 // Minimum arc length to prevent division by zero with degenerate paths
 const MIN_ARC_LENGTH = 0.001;
 
+// Curvature damping: high-curvature points (sharp turns) get reduced displacement
+// to prevent "shearing" artifacts where displacement direction changes abruptly
+const HIGH_CURVATURE_THRESHOLD = 0.7;  // radians (~40 degrees)
+const HIGH_CURVATURE_MIN_FACTOR = 0.25;  // minimum damping factor at max curvature
+
 export type MotionStyle = 'whip' | 'quiver' | 'strain' | 'thrash';
 
 export interface MotionWeights {
@@ -149,6 +154,10 @@ export class EldritchFocusEngine {
     // Point positions for distance calculations
     private pointPositions: Float32Array;  // [x, y, x, y, ...] for endpoint of each segment
 
+    // Curvature at each point (for damping high-curvature regions)
+    // Higher values = sharper turns = more damping
+    private pointCurvatures: Float32Array;
+
     // Whether the path is closed (ends with Z command) - affects distance wrapping
     private isClosedPath: boolean;
 
@@ -179,6 +188,62 @@ export class EldritchFocusEngine {
         this.pointPositions = positions;
         // Guard against degenerate paths with zero length
         this.totalArcLength = Math.max(total, MIN_ARC_LENGTH);
+
+        // Compute curvature at each point for damping high-curvature regions
+        this.pointCurvatures = this.computeCurvatures();
+    }
+
+    /**
+     * Compute curvature at each point by measuring angle change between
+     * incoming and outgoing vectors. Higher curvature = sharper turn.
+     */
+    private computeCurvatures(): Float32Array {
+        const numPoints = this.pointPositions.length / 2;
+        const curvatures = new Float32Array(numPoints);
+
+        for (let i = 0; i < numPoints; i++) {
+            // Get current point
+            const x = this.pointPositions[i * 2];
+            const y = this.pointPositions[i * 2 + 1];
+
+            // Get previous point (wrap around for closed paths)
+            const prevIdx = i > 0 ? i - 1 : (this.isClosedPath ? numPoints - 1 : 0);
+            const prevX = this.pointPositions[prevIdx * 2];
+            const prevY = this.pointPositions[prevIdx * 2 + 1];
+
+            // Get next point (wrap around for closed paths)
+            const nextIdx = i < numPoints - 1 ? i + 1 : (this.isClosedPath ? 0 : numPoints - 1);
+            const nextX = this.pointPositions[nextIdx * 2];
+            const nextY = this.pointPositions[nextIdx * 2 + 1];
+
+            // Incoming vector (from prev to current)
+            const inX = x - prevX;
+            const inY = y - prevY;
+            const inLen = Math.sqrt(inX * inX + inY * inY) || 1;
+
+            // Outgoing vector (from current to next)
+            const outX = nextX - x;
+            const outY = nextY - y;
+            const outLen = Math.sqrt(outX * outX + outY * outY) || 1;
+
+            // Normalize
+            const inNormX = inX / inLen;
+            const inNormY = inY / inLen;
+            const outNormX = outX / outLen;
+            const outNormY = outY / outLen;
+
+            // Dot product gives cos(angle)
+            const dot = inNormX * outNormX + inNormY * outNormY;
+            // Clamp to [-1, 1] to avoid NaN from acos
+            const clampedDot = Math.max(-1, Math.min(1, dot));
+
+            // Angle between vectors (0 = straight, PI = 180 degree turn)
+            const angle = Math.acos(clampedDot);
+
+            curvatures[i] = angle;
+        }
+
+        return curvatures;
     }
 
     private computeArcLengths(): {
@@ -644,12 +709,69 @@ export class EldritchFocusEngine {
                 totalDy += driftY;
             }
 
-            displacements[i * 2] = totalDx;
-            displacements[i * 2 + 1] = totalDy;
+            // Apply curvature damping: reduce displacement at high-curvature points
+            // to prevent shearing artifacts where direction changes abruptly
+            const curvature = this.pointCurvatures[i];
+            let curvatureFactor = 1.0;
+            if (curvature > HIGH_CURVATURE_THRESHOLD) {
+                // Map curvature from [threshold, PI] to [1.0, minFactor]
+                const excess = curvature - HIGH_CURVATURE_THRESHOLD;
+                const maxExcess = Math.PI - HIGH_CURVATURE_THRESHOLD;
+                const t = Math.min(excess / maxExcess, 1.0);
+                // Smooth interpolation using smoothstep
+                const smooth = t * t * (3 - 2 * t);
+                curvatureFactor = 1.0 - smooth * (1.0 - HIGH_CURVATURE_MIN_FACTOR);
+            }
+
+            displacements[i * 2] = totalDx * curvatureFactor;
+            displacements[i * 2 + 1] = totalDy * curvatureFactor;
         }
+
+        // Post-process: smooth displacements around high-curvature points
+        // to prevent abrupt transitions
+        this.smoothHighCurvatureRegions(displacements);
 
         this.lastTime = effectiveTime;
         return displacements;
+    }
+
+    /**
+     * Smooth displacements around high-curvature points by averaging with neighbors.
+     * This prevents abrupt "braking" where motion suddenly stops at a sharp turn.
+     */
+    private smoothHighCurvatureRegions(displacements: Float32Array): void {
+        const numPoints = displacements.length / 2;
+        const smoothRadius = 3;  // Points on each side to blend with
+
+        // Find high-curvature points that need smoothing
+        for (let i = 0; i < numPoints; i++) {
+            const curvature = this.pointCurvatures[i];
+            if (curvature <= HIGH_CURVATURE_THRESHOLD) continue;
+
+            // Calculate smoothing strength based on curvature
+            const excess = curvature - HIGH_CURVATURE_THRESHOLD;
+            const maxExcess = Math.PI - HIGH_CURVATURE_THRESHOLD;
+            const strength = Math.min(excess / maxExcess, 1.0) * 0.5;  // Max 50% blend
+
+            // Gather neighbor displacements
+            let sumDx = 0, sumDy = 0, count = 0;
+            for (let j = -smoothRadius; j <= smoothRadius; j++) {
+                const idx = i + j;
+                if (idx < 0 || idx >= numPoints) continue;
+                sumDx += displacements[idx * 2];
+                sumDy += displacements[idx * 2 + 1];
+                count++;
+            }
+
+            if (count > 0) {
+                const avgDx = sumDx / count;
+                const avgDy = sumDy / count;
+
+                // Blend toward average
+                displacements[i * 2] = displacements[i * 2] * (1 - strength) + avgDx * strength;
+                displacements[i * 2 + 1] = displacements[i * 2 + 1] * (1 - strength) + avgDy * strength;
+            }
+        }
     }
 
     // Update anchor influence (when anchors change)
