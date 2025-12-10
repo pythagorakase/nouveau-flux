@@ -1397,24 +1397,24 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 <defs>
                                     {baseColors.map((c, ci) => (
                                         <React.Fragment key={c.name}>
-                                            {/* Diagonal lines pattern - finer */}
+                                            {/* Diagonal lines pattern - very fine */}
                                             <pattern
                                                 id={`diag-${c.name}`}
                                                 patternUnits="userSpaceOnUse"
-                                                width="2"
-                                                height="2"
+                                                width="1.2"
+                                                height="1.2"
                                                 patternTransform="rotate(45)"
                                             >
-                                                <line x1="0" y1="0" x2="0" y2="2" stroke={c.stroke} strokeWidth="0.8" />
+                                                <line x1="0" y1="0" x2="0" y2="1.2" stroke={c.stroke} strokeWidth="0.4" />
                                             </pattern>
-                                            {/* Dots pattern - smaller */}
+                                            {/* Dots pattern - very small */}
                                             <pattern
                                                 id={`dots-${c.name}`}
                                                 patternUnits="userSpaceOnUse"
-                                                width="2.5"
-                                                height="2.5"
+                                                width="1.5"
+                                                height="1.5"
                                             >
-                                                <circle cx="1.25" cy="1.25" r="0.6" fill={c.stroke} />
+                                                <circle cx="0.75" cy="0.75" r="0.35" fill={c.stroke} />
                                             </pattern>
                                         </React.Fragment>
                                     ))}
