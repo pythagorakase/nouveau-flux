@@ -1314,56 +1314,97 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
-                    {/* Path Topology Debug Overlay - Segment starts (red) and ends (blue) */}
-                    {showTopology && parsedPath && pathTopology && (
-                        <svg
-                            style={{
-                                position: 'absolute',
-                                inset: 0,
-                                width: baseWidth,
-                                height: baseHeight,
-                                pointerEvents: 'none',
-                                overflow: 'visible',
-                            }}
-                            viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
-                        >
-                            {/* Compute segment ends (last point before next segment start or end of path) */}
-                            {pathTopology.segmentStarts.map((startIdx, segIdx) => {
-                                const totalPoints = parsedPath.coords.length / 2;
-                                const nextSegStart = pathTopology.segmentStarts[segIdx + 1];
-                                const endIdx = nextSegStart !== undefined ? nextSegStart - 1 : totalPoints - 1;
+                    {/* Path Topology Debug Overlay - Show GAPS between segments */}
+                    {showTopology && parsedPath && pathTopology && (() => {
+                        const totalPoints = parsedPath.coords.length / 2;
+                        const GAP_THRESHOLD = 2; // Units - gaps larger than this are shown
 
-                                // Start point
-                                const sx = parsedPath.coords[startIdx * 2];
-                                const sy = parsedPath.coords[startIdx * 2 + 1];
-                                // Direction for start arrow
-                                const snextIdx = startIdx + 1;
-                                const hasSnext = snextIdx < totalPoints;
-                                const snx = hasSnext ? parsedPath.coords[snextIdx * 2] : sx + 1;
-                                const sny = hasSnext ? parsedPath.coords[snextIdx * 2 + 1] : sy;
-                                const startAngle = Math.atan2(sny - sy, snx - sx) * 180 / Math.PI;
+                        // Find gaps: where segment N ends far from segment N+1 start
+                        const gaps: Array<{
+                            endSegIdx: number;
+                            startSegIdx: number;
+                            endX: number;
+                            endY: number;
+                            startX: number;
+                            startY: number;
+                            distance: number;
+                        }> = [];
 
-                                // End point
-                                const ex = parsedPath.coords[endIdx * 2];
-                                const ey = parsedPath.coords[endIdx * 2 + 1];
-                                // Direction for end arrow (pointing backward along path)
-                                const eprevIdx = endIdx - 1;
-                                const hasEprev = eprevIdx >= startIdx;
-                                const epx = hasEprev ? parsedPath.coords[eprevIdx * 2] : ex - 1;
-                                const epy = hasEprev ? parsedPath.coords[eprevIdx * 2 + 1] : ey;
-                                const endAngle = Math.atan2(ey - epy, ex - epx) * 180 / Math.PI;
+                        for (let i = 0; i < pathTopology.segmentStarts.length - 1; i++) {
+                            const segEndIdx = pathTopology.segmentStarts[i + 1] - 1;
+                            const nextSegStartIdx = pathTopology.segmentStarts[i + 1];
 
-                                return (
-                                    <g key={segIdx}>
-                                        {/* Start marker - red arrow */}
-                                        <g transform={`translate(${sx}, ${sy})`}>
-                                            <g transform={`rotate(${startAngle})`}>
-                                                <path
-                                                    d="M-3,-2 L3,0 L-3,2 Z"
-                                                    fill="#ef4444"
-                                                    opacity={0.7}
-                                                />
-                                            </g>
+                            const endX = parsedPath.coords[segEndIdx * 2];
+                            const endY = parsedPath.coords[segEndIdx * 2 + 1];
+                            const startX = parsedPath.coords[nextSegStartIdx * 2];
+                            const startY = parsedPath.coords[nextSegStartIdx * 2 + 1];
+
+                            const dist = Math.sqrt((startX - endX) ** 2 + (startY - endY) ** 2);
+                            if (dist > GAP_THRESHOLD) {
+                                gaps.push({
+                                    endSegIdx: i,
+                                    startSegIdx: i + 1,
+                                    endX, endY,
+                                    startX, startY,
+                                    distance: dist,
+                                });
+                            }
+                        }
+
+                        return (
+                            <svg
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: baseWidth,
+                                    height: baseHeight,
+                                    pointerEvents: 'none',
+                                    overflow: 'visible',
+                                }}
+                                viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
+                            >
+                                {gaps.map((gap, idx) => (
+                                    <g key={idx}>
+                                        {/* Dashed line showing the gap */}
+                                        <line
+                                            x1={gap.endX}
+                                            y1={gap.endY}
+                                            x2={gap.startX}
+                                            y2={gap.startY}
+                                            stroke="#f59e0b"
+                                            strokeWidth={0.5}
+                                            strokeDasharray="2,1"
+                                            opacity={0.8}
+                                        />
+                                        {/* End marker (blue square) */}
+                                        <g transform={`translate(${gap.endX}, ${gap.endY})`}>
+                                            <rect
+                                                x={-2}
+                                                y={-2}
+                                                width={4}
+                                                height={4}
+                                                fill="#3b82f6"
+                                                opacity={0.8}
+                                            />
+                                            <text
+                                                x={-6}
+                                                y={-3}
+                                                fill="#3b82f6"
+                                                fontSize={3.5}
+                                                fontFamily="monospace"
+                                                fontWeight="bold"
+                                                textAnchor="end"
+                                            >
+                                                {gap.endSegIdx}■
+                                            </text>
+                                        </g>
+                                        {/* Start marker (red arrow) */}
+                                        <g transform={`translate(${gap.startX}, ${gap.startY})`}>
+                                            <circle
+                                                r={2}
+                                                fill="#ef4444"
+                                                opacity={0.8}
+                                            />
                                             <text
                                                 x={4}
                                                 y={-3}
@@ -1371,38 +1412,15 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                                 fontSize={3.5}
                                                 fontFamily="monospace"
                                                 fontWeight="bold"
-                                                opacity={0.8}
                                             >
-                                                {segIdx}
-                                            </text>
-                                        </g>
-                                        {/* End marker - blue square */}
-                                        <g transform={`translate(${ex}, ${ey})`}>
-                                            <rect
-                                                x={-2}
-                                                y={-2}
-                                                width={4}
-                                                height={4}
-                                                fill="#3b82f6"
-                                                opacity={0.7}
-                                            />
-                                            <text
-                                                x={4}
-                                                y={-3}
-                                                fill="#3b82f6"
-                                                fontSize={3.5}
-                                                fontFamily="monospace"
-                                                fontWeight="bold"
-                                                opacity={0.8}
-                                            >
-                                                {segIdx}
+                                                ▸{gap.startSegIdx}
                                             </text>
                                         </g>
                                     </g>
-                                );
-                            })}
-                        </svg>
-                    )}
+                                ))}
+                            </svg>
+                        );
+                    })()}
 
                     {/* Line creation preview */}
                     {lineStart && (
@@ -1504,7 +1522,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 <div className="text-xs text-neutral-500 pt-1">
                                     {pathTopology.segmentStarts.length} segments
                                     <br />
-                                    <span className="text-red-400">▸ start</span> / <span className="text-blue-400">■ end</span>
+                                    <span className="text-amber-400">---</span> gaps (staple candidates)
                                 </div>
                             )}
                         </div>
