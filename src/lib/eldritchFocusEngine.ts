@@ -5,6 +5,20 @@
 import { ParsedPath } from './pathParser';
 import { NoiseEngine } from './noiseEngine';
 
+// --- Constants ---
+
+// Default loop period when none specified (seconds)
+export const DEFAULT_LOOP_PERIOD = 10;
+
+// How many points to check around a focus position when avoiding anchors
+const ANCHOR_CHECK_RADIUS = 5;
+
+// Points with anchor influence below this threshold are considered "pinned"
+const ANCHOR_INFLUENCE_THRESHOLD = 0.3;
+
+// Minimum arc length to prevent division by zero with degenerate paths
+const MIN_ARC_LENGTH = 0.001;
+
 export type MotionStyle = 'whip' | 'quiver' | 'strain' | 'thrash';
 
 export interface MotionWeights {
@@ -82,18 +96,25 @@ interface FocusSchedule {
     restPeriods: Array<{ start: number; end: number }>;  // Global rest windows
 }
 
-// Seeded random number generator for deterministic scheduling
+// SplitMix32 - higher quality seeded RNG than LCG
+// Better distribution for visual randomness, avoids low-bit correlations
 class SeededRNG {
-    private seed: number;
+    private state: number;
 
     constructor(seed: number) {
-        this.seed = seed;
+        this.state = seed >>> 0;  // Ensure unsigned 32-bit
     }
 
-    // LCG random - returns [0, 1)
+    // SplitMix32 - returns [0, 1)
     next(): number {
-        this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
-        return this.seed / 0x7fffffff;
+        this.state = (this.state + 0x9e3779b9) >>> 0;
+        let z = this.state;
+        z = (z ^ (z >>> 16)) >>> 0;
+        z = Math.imul(z, 0x85ebca6b) >>> 0;
+        z = (z ^ (z >>> 13)) >>> 0;
+        z = Math.imul(z, 0xc2b2ae35) >>> 0;
+        z = (z ^ (z >>> 16)) >>> 0;
+        return z / 0x100000000;
     }
 
     // Random in range [min, max]
@@ -101,9 +122,13 @@ class SeededRNG {
         return min + this.next() * (max - min);
     }
 
-    // Pick from weighted options
+    // Pick from weighted options (handles zero total weight)
     weightedChoice<T>(options: T[], weights: number[]): T {
         const total = weights.reduce((a, b) => a + b, 0);
+        // If all weights are zero, pick uniformly at random
+        if (total <= 0) {
+            return options[Math.floor(this.next() * options.length)];
+        }
         let r = this.next() * total;
         for (let i = 0; i < options.length; i++) {
             r -= weights[i];
@@ -124,6 +149,9 @@ export class EldritchFocusEngine {
     // Point positions for distance calculations
     private pointPositions: Float32Array;  // [x, y, x, y, ...] for endpoint of each segment
 
+    // Whether the path is closed (ends with Z command) - affects distance wrapping
+    private isClosedPath: boolean;
+
     // Anchor influence (to avoid placing foci near anchors)
     private anchorInfluence: Float32Array;
 
@@ -133,6 +161,7 @@ export class EldritchFocusEngine {
     private scheduleLoopPeriod: number | null = null;
 
     // Cache for displacement calculations
+    // lastTime: Used by getScheduleInfo() to report currently active foci
     private lastTime: number = -1;
     private cachedDisplacements: Float32Array | null = null;
 
@@ -141,11 +170,15 @@ export class EldritchFocusEngine {
         this.anchorInfluence = anchorInfluence;
         this.noise = new NoiseEngine(54321);  // Different seed than main noise
 
+        // Check if path is closed (has Z command)
+        this.isClosedPath = parsedPath.commands.includes(5);  // 5 = Z
+
         // Compute arc lengths
         const { arcLengths, positions, total } = this.computeArcLengths();
         this.pointArcLengths = arcLengths;
         this.pointPositions = positions;
-        this.totalArcLength = total;
+        // Guard against degenerate paths with zero length
+        this.totalArcLength = Math.max(total, MIN_ARC_LENGTH);
     }
 
     private computeArcLengths(): {
@@ -286,10 +319,15 @@ export class EldritchFocusEngine {
         return this.pointArcLengths[idx] / this.totalArcLength;
     }
 
-    // Get path distance between two parametric positions (accounts for wrapping)
+    // Get path distance between two parametric positions
+    // For closed paths, considers wrap-around (shorter of two directions)
+    // For open paths, uses simple linear distance
     private pathDistance(t1: number, t2: number): number {
         const d = Math.abs(t1 - t2);
-        return Math.min(d, 1 - d);  // Handle wrap-around for closed paths
+        if (this.isClosedPath) {
+            return Math.min(d, 1 - d);  // Wrap-around for closed paths
+        }
+        return d;  // Simple distance for open paths
     }
 
     // Generate a schedule of foci for a given loop period
@@ -297,22 +335,30 @@ export class EldritchFocusEngine {
         this.scheduleSeed = seed ?? Math.floor(Math.random() * 1000000);
         const rng = new SeededRNG(this.scheduleSeed);
 
+        // Validate and clamp parameters to prevent invalid states
+        const minFoci = Math.max(1, Math.floor(params.minFoci));
+        const maxFoci = Math.max(minFoci, Math.floor(params.maxFoci));
+        const focusDurationMin = Math.max(0.1, params.focusDurationMin);
+        const focusDurationMax = Math.max(focusDurationMin, params.focusDurationMax);
+        const restDurationMin = Math.max(0, params.restDurationMin);
+        const restDurationMax = Math.max(restDurationMin, params.restDurationMax);
+
         const foci: Focus[] = [];
         const restPeriods: Array<{ start: number; end: number }> = [];
 
         let currentTime = 0;
         const motionStyles: MotionStyle[] = ['whip', 'quiver', 'strain', 'thrash'];
         const weights = [
-            params.motionWeights.whip,
-            params.motionWeights.quiver,
-            params.motionWeights.strain,
-            params.motionWeights.thrash,
+            Math.max(0, params.motionWeights.whip),
+            Math.max(0, params.motionWeights.quiver),
+            Math.max(0, params.motionWeights.strain),
+            Math.max(0, params.motionWeights.thrash),
         ];
 
         // Build schedule until we exceed loop period
         while (currentTime < loopPeriod) {
             // Decide how many foci this wave
-            const numFoci = Math.floor(rng.range(params.minFoci, params.maxFoci + 0.99));
+            const numFoci = Math.floor(rng.range(minFoci, maxFoci + 0.99));
 
             // Generate foci for this wave
             const waveFoci: Focus[] = [];
@@ -334,7 +380,7 @@ export class EldritchFocusEngine {
                 usedPositions.push(pathT);
 
                 const style = rng.weightedChoice(motionStyles, weights);
-                const duration = rng.range(params.focusDurationMin, params.focusDurationMax);
+                const duration = rng.range(focusDurationMin, focusDurationMax);
 
                 // Timing: slight stagger between foci in same wave
                 const stagger = i * rng.range(0.1, 0.3);
@@ -363,7 +409,7 @@ export class EldritchFocusEngine {
             ));
 
             // Add rest period
-            const restDuration = rng.range(params.restDurationMin, params.restDurationMax);
+            const restDuration = rng.range(restDurationMin, restDurationMax);
             restPeriods.push({
                 start: maxFocusEnd,
                 end: maxFocusEnd + restDuration,
@@ -401,10 +447,10 @@ export class EldritchFocusEngine {
         const pointIdx = this.tToPointIndex(pathT);
         const numPoints = this.anchorInfluence.length;
 
-        // Check nearby points
-        for (let offset = -5; offset <= 5; offset++) {
+        // Check nearby points within ANCHOR_CHECK_RADIUS
+        for (let offset = -ANCHOR_CHECK_RADIUS; offset <= ANCHOR_CHECK_RADIUS; offset++) {
             const idx = (pointIdx + offset + numPoints) % numPoints;
-            if (this.anchorInfluence[idx] < 0.3) {
+            if (this.anchorInfluence[idx] < ANCHOR_INFLUENCE_THRESHOLD) {
                 return true;  // This area is pinned
             }
         }
@@ -436,8 +482,10 @@ export class EldritchFocusEngine {
     }
 
     // Get displacement for a single point from a focus
+    // Accepts pointIdx directly to avoid redundant i→t→i binary search
     private getFocusDisplacement(
         focus: Focus,
+        pointIdx: number,
         pointT: number,
         time: number,
         params: EldritchFocusParams
@@ -457,8 +505,7 @@ export class EldritchFocusEngine {
         // Distance falloff
         const distanceFalloff = Math.exp(-pathDist / params.propagationDecay);
 
-        // Get point position for direction calculations
-        const pointIdx = this.tToPointIndex(pointT);
+        // Get point position for direction calculations (using pointIdx directly)
         const px = this.pointPositions[pointIdx * 2];
         const py = this.pointPositions[pointIdx * 2 + 1];
 
@@ -578,7 +625,7 @@ export class EldritchFocusEngine {
             if (!inRest) {
                 for (const focus of this.schedule.foci) {
                     const { dx, dy } = this.getFocusDisplacement(
-                        focus, pointT, effectiveTime, params
+                        focus, i, pointT, effectiveTime, params
                     );
                     totalDx += dx;
                     totalDy += dy;

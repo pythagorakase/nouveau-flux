@@ -6,6 +6,7 @@ import {
     EldritchFocusEngine,
     EldritchFocusParams,
     DEFAULT_ELDRITCH_FOCUS_PARAMS,
+    DEFAULT_LOOP_PERIOD,
     MotionWeights,
 } from './eldritchFocusEngine';
 
@@ -274,7 +275,7 @@ export class FrameAnimator {
             const displacements = this.eldritchEngine.calculateDisplacements(
                 this.time,
                 eldritchFocus,
-                loopPeriod > 0 ? loopPeriod : 10  // Default 10s cycle if no loop
+                loopPeriod > 0 ? loopPeriod : DEFAULT_LOOP_PERIOD
             );
 
             for (let i = 0; i < numPoints; i++) {
