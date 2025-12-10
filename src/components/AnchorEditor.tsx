@@ -1314,7 +1314,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
-                    {/* Path Topology Debug Overlay - Minimal segment start markers */}
+                    {/* Path Topology Debug Overlay - Segment starts (red) and ends (blue) */}
                     {showTopology && parsedPath && pathTopology && (
                         <svg
                             style={{
@@ -1327,39 +1327,77 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             }}
                             viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
                         >
-                            {/* Segment start markers - small arrows pointing inward */}
-                            {pathTopology.segmentStarts.map((pointIdx, segIdx) => {
-                                const x = parsedPath.coords[pointIdx * 2];
-                                const y = parsedPath.coords[pointIdx * 2 + 1];
-                                // Get direction to next point for arrow orientation
-                                const nextIdx = pointIdx + 1;
-                                const hasNext = nextIdx < parsedPath.coords.length / 2;
-                                const nx = hasNext ? parsedPath.coords[nextIdx * 2] : x + 1;
-                                const ny = hasNext ? parsedPath.coords[nextIdx * 2 + 1] : y;
-                                const angle = Math.atan2(ny - y, nx - x) * 180 / Math.PI;
+                            {/* Compute segment ends (last point before next segment start or end of path) */}
+                            {pathTopology.segmentStarts.map((startIdx, segIdx) => {
+                                const totalPoints = parsedPath.coords.length / 2;
+                                const nextSegStart = pathTopology.segmentStarts[segIdx + 1];
+                                const endIdx = nextSegStart !== undefined ? nextSegStart - 1 : totalPoints - 1;
+
+                                // Start point
+                                const sx = parsedPath.coords[startIdx * 2];
+                                const sy = parsedPath.coords[startIdx * 2 + 1];
+                                // Direction for start arrow
+                                const snextIdx = startIdx + 1;
+                                const hasSnext = snextIdx < totalPoints;
+                                const snx = hasSnext ? parsedPath.coords[snextIdx * 2] : sx + 1;
+                                const sny = hasSnext ? parsedPath.coords[snextIdx * 2 + 1] : sy;
+                                const startAngle = Math.atan2(sny - sy, snx - sx) * 180 / Math.PI;
+
+                                // End point
+                                const ex = parsedPath.coords[endIdx * 2];
+                                const ey = parsedPath.coords[endIdx * 2 + 1];
+                                // Direction for end arrow (pointing backward along path)
+                                const eprevIdx = endIdx - 1;
+                                const hasEprev = eprevIdx >= startIdx;
+                                const epx = hasEprev ? parsedPath.coords[eprevIdx * 2] : ex - 1;
+                                const epy = hasEprev ? parsedPath.coords[eprevIdx * 2 + 1] : ey;
+                                const endAngle = Math.atan2(ey - epy, ex - epx) * 180 / Math.PI;
 
                                 return (
-                                    <g key={pointIdx} transform={`translate(${x}, ${y})`}>
-                                        {/* Small arrow pointing along path direction */}
-                                        <g transform={`rotate(${angle})`}>
-                                            <path
-                                                d="M-3,-2 L3,0 L-3,2 Z"
+                                    <g key={segIdx}>
+                                        {/* Start marker - red arrow */}
+                                        <g transform={`translate(${sx}, ${sy})`}>
+                                            <g transform={`rotate(${startAngle})`}>
+                                                <path
+                                                    d="M-3,-2 L3,0 L-3,2 Z"
+                                                    fill="#ef4444"
+                                                    opacity={0.7}
+                                                />
+                                            </g>
+                                            <text
+                                                x={4}
+                                                y={-3}
                                                 fill="#ef4444"
+                                                fontSize={3.5}
+                                                fontFamily="monospace"
+                                                fontWeight="bold"
+                                                opacity={0.8}
+                                            >
+                                                {segIdx}
+                                            </text>
+                                        </g>
+                                        {/* End marker - blue square */}
+                                        <g transform={`translate(${ex}, ${ey})`}>
+                                            <rect
+                                                x={-2}
+                                                y={-2}
+                                                width={4}
+                                                height={4}
+                                                fill="#3b82f6"
                                                 opacity={0.7}
                                             />
+                                            <text
+                                                x={4}
+                                                y={-3}
+                                                fill="#3b82f6"
+                                                fontSize={3.5}
+                                                fontFamily="monospace"
+                                                fontWeight="bold"
+                                                opacity={0.8}
+                                            >
+                                                {segIdx}
+                                            </text>
                                         </g>
-                                        {/* Tiny label offset from arrow */}
-                                        <text
-                                            x={4}
-                                            y={-3}
-                                            fill="#ef4444"
-                                            fontSize={3.5}
-                                            fontFamily="monospace"
-                                            fontWeight="bold"
-                                            opacity={0.8}
-                                        >
-                                            {segIdx}
-                                        </text>
                                     </g>
                                 );
                             })}
@@ -1464,7 +1502,9 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             </div>
                             {showTopology && pathTopology && (
                                 <div className="text-xs text-neutral-500 pt-1">
-                                    {pathTopology.segmentStarts.length} segments (red arrows)
+                                    {pathTopology.segmentStarts.length} segments
+                                    <br />
+                                    <span className="text-red-400">▸ start</span> / <span className="text-blue-400">■ end</span>
                                 </div>
                             )}
                         </div>
