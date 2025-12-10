@@ -198,6 +198,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                                 <SelectItem value="15">15 fps (balanced)</SelectItem>
                                 <SelectItem value="24">24 fps (smooth)</SelectItem>
                                 <SelectItem value="30">30 fps (very smooth)</SelectItem>
+                                <SelectItem value="60">60 fps (ultra smooth)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

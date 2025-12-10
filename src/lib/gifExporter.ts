@@ -70,7 +70,9 @@ export async function encodeGif(
     onProgress?: (progress: GifExportProgress) => void
 ): Promise<Blob> {
     const { width, height, fps } = options;
-    const delay = Math.round(1000 / fps); // ms per frame
+    // GIF delay is in centiseconds (1/100th of a second)
+    // fps=30 → delay=3 (30ms), fps=15 → delay=7 (70ms)
+    const delay = Math.round(100 / fps);
 
     const gif = GIFEncoder();
 

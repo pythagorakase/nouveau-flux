@@ -76,3 +76,4 @@ function MyComponent() {
 Peer dependencies: `react`, `react-dom`
 
 Optional: `leva` (only needed if using `AnchorPicker` development tool)
+- When adding UI pieces, first check https://ui.shadcn.com/ for a matching component and install/adapt the Shadcn version rather than creating bespoke primitives.
