@@ -325,8 +325,8 @@ const AnimatedFrameCore = forwardRef<AnimatedFrameHandle, AnimatedFrameCoreProps
 
     // Handle mouse down for pan
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        // Middle click or Alt+left click to pan
-        if (e.button === 1 || (e.button === 0 && e.altKey)) {
+        // Left click, middle click, or Alt+left click to pan
+        if (e.button === 0 || e.button === 1) {
             isDragging.current = true;
             lastMousePos.current = { x: e.clientX, y: e.clientY };
             e.preventDefault();
