@@ -3,7 +3,7 @@
 import { ParsedPath } from './pathParser';
 import { NoiseEngine } from './noiseEngine';
 
-export type MotionType = 'psychedelic' | 'eldritch';
+export type MotionType = 'psychedelic' | 'eldritch' | 'vegetal';
 
 export interface GradientStop {
     offset: number; // 0-1
@@ -35,6 +35,15 @@ export interface AnimationParams {
     coilTightness: number;
     eldritchOriginX: number;
     eldritchOriginY: number;
+    tensionAmount: number;    // 0-1: how ridged/tense the motion is
+    shiverIntensity: number;  // 0-1: high-frequency tremor strength
+    tremorIntensity: number;  // 0-1: medium-frequency "living flesh" quiver
+    // Vegetal/Wind-specific
+    windSpeed: number;        // How fast gusts travel
+    windStrength: number;     // Max displacement amount
+    windAngle: number;        // Wind direction in degrees
+    gustScale: number;        // Size of gust patterns
+    flutterIntensity: number; // High-freq leaf tremor
     // Shared
     falloffRadius: number;
 }
@@ -56,6 +65,15 @@ export const DEFAULT_PARAMS: AnimationParams = {
     coilTightness: 0.5,
     eldritchOriginX: 0,
     eldritchOriginY: 0,
+    tensionAmount: 0.5,      // Moderate tension by default
+    shiverIntensity: 0.3,    // Subtle shiver
+    tremorIntensity: 0.5,    // Medium "living flesh" quiver
+    // Vegetal/Wind defaults
+    windSpeed: 0.5,
+    windStrength: 2.0,
+    windAngle: 45,           // Diagonal wind
+    gustScale: 0.02,
+    flutterIntensity: 0.4,
     // Shared
     falloffRadius: 25,
 };
@@ -205,7 +223,18 @@ export class FrameAnimator {
             coilTightness,
             eldritchOriginX,
             eldritchOriginY,
+            tensionAmount,
+            shiverIntensity,
+            tremorIntensity,
+            windSpeed,
+            windStrength,
+            windAngle,
+            gustScale,
+            flutterIntensity,
         } = this.params;
+
+        // Convert wind angle from degrees to radians
+        const windAngleRad = (windAngle * Math.PI) / 180;
 
         for (let i = 0; i < numPoints; i++) {
             const weight = this.influence[i];
@@ -238,6 +267,22 @@ export class FrameAnimator {
                         coilTightness,
                         originX: eldritchOriginX,
                         originY: eldritchOriginY,
+                        tensionAmount,
+                        shiverIntensity,
+                        tremorIntensity,
+                    }
+                );
+            } else if (motionType === 'vegetal') {
+                displacement = this.noise.vegetalDisplacement(
+                    baseX,
+                    baseY,
+                    this.time,
+                    {
+                        windSpeed,
+                        windStrength,
+                        windAngle: windAngleRad,
+                        gustScale,
+                        flutterIntensity,
                     }
                 );
             } else {
