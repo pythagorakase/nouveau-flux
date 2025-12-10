@@ -13,6 +13,8 @@ export type { GradientStop };
 export interface AnimatedFrameHandle {
     getCanvas: () => HTMLCanvasElement | null;
     renderAtTime: (time: number) => void;
+    setLoopPeriod: (seconds: number) => void;
+    getLoopPeriod: () => number;
 }
 
 export interface StyleConfig {
@@ -80,6 +82,10 @@ const AnimatedFrameCore = forwardRef<AnimatedFrameHandle, AnimatedFrameCoreProps
         renderAtTime: (time: number) => {
             animatorRef.current?.renderAtTime(time);
         },
+        setLoopPeriod: (seconds: number) => {
+            animatorRef.current?.setLoopPeriod(seconds);
+        },
+        getLoopPeriod: () => animatorRef.current?.getLoopPeriod() ?? 0,
     }), []);
 
     // Calculate effective dimensions maintaining aspect ratio

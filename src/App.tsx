@@ -710,6 +710,9 @@ function App() {
                 onOpenChange={setShowExportDialog}
                 getCanvas={() => animatedFrameRef.current?.getCanvas() ?? null}
                 renderAtTime={(time) => animatedFrameRef.current?.renderAtTime(time)}
+                setLoopPeriod={(seconds) => animatedFrameRef.current?.setLoopPeriod(seconds)}
+                getLoopPeriod={() => animatedFrameRef.current?.getLoopPeriod() ?? 0}
+                params={params}
                 projectName={projectName ?? undefined}
             />
         </>

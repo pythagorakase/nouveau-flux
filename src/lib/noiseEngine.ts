@@ -233,7 +233,7 @@ export class NoiseEngine {
         y: number,
         time: number,
         loopPeriod: number,
-        radius: number = 1.0
+        radius: number = loopPeriod / (2 * Math.PI) // radius chosen so circular arc length over loopPeriod ~= linear distance
     ): number {
         const angle = (time / loopPeriod) * Math.PI * 2;
         const tz = Math.cos(angle) * radius;
@@ -342,26 +342,45 @@ export class NoiseEngine {
         octaves: number = 4,
         persistence: number = 0.5,
         lacunarity: number = 2,
-        warpStrength: number = 15
+        warpStrength: number = 15,
+        loopPeriod: number = 0
     ): { dx: number; dy: number } {
+        const useLoop = loopPeriod > 0;
+        const safePeriod = (multiplier: number) => {
+            if (!useLoop) return 0;
+            const denom = Math.max(1e-6, Math.abs(multiplier));
+            return loopPeriod / denom;
+        };
+        const fbmSample = (
+            sx: number,
+            sy: number,
+            baseTime: number,
+            timeMultiplier: number,
+            o: number,
+            p: number,
+            l: number
+        ) => useLoop
+            ? this.fbmLooping(sx, sy, baseTime * timeMultiplier, safePeriod(timeMultiplier), o, p, l)
+            : this.fbm(sx, sy, baseTime * timeMultiplier, o, p, l);
+
         // First layer of warping - distort the input coordinates
-        const warpX = this.fbm(x + 100, y, time * 0.7, 2, 0.5, 2);
-        const warpY = this.fbm(x, y + 100, time * 0.6, 2, 0.5, 2);
+        const warpX = fbmSample(x + 100, y, time, 0.7, 2, 0.5, 2);
+        const warpY = fbmSample(x, y + 100, time, 0.6, 2, 0.5, 2);
 
         // Apply warped coordinates
         const wx = x + warpX * warpStrength * 0.01;
         const wy = y + warpY * warpStrength * 0.01;
 
         // Second layer of warping for extra organic feel
-        const warp2X = this.fbm(wx + 50, wy + 30, time * 0.5, 2, 0.5, 2);
-        const warp2Y = this.fbm(wx + 30, wy + 50, time * 0.4, 2, 0.5, 2);
+        const warp2X = fbmSample(wx + 50, wy + 30, time, 0.5, 2, 0.5, 2);
+        const warp2Y = fbmSample(wx + 30, wy + 50, time, 0.4, 2, 0.5, 2);
 
         const wwx = wx + warp2X * warpStrength * 0.005;
         const wwy = wy + warp2Y * warpStrength * 0.005;
 
         // Final displacement using fully warped coordinates
-        const dx = this.fbm(wwx, wwy, time, octaves, persistence, lacunarity);
-        const dy = this.fbm(wwx + 50, wwy + 50, time + 1000, octaves, persistence, lacunarity);
+        const dx = fbmSample(wwx, wwy, time, 1, octaves, persistence, lacunarity);
+        const dy = fbmSample(wwx + 50, wwy + 50, time + 1000, 1, octaves, persistence, lacunarity);
 
         return { dx, dy };
     }
@@ -513,15 +532,42 @@ export class NoiseEngine {
             lacunarity: number;
             warpStrength: number;
             breathingAmount: number;
-        }
+        },
+        loopPeriod: number = 0
     ): { dx: number; dy: number } {
         const { noiseScale, octaves, persistence, lacunarity, warpStrength, breathingAmount } = params;
+        const useLoop = loopPeriod > 0;
+        const safePeriod = (multiplier: number) => {
+            if (!useLoop) return 0;
+            const denom = Math.max(1e-6, Math.abs(multiplier));
+            return loopPeriod / denom;
+        };
+        const fbmSample = (
+            sx: number,
+            sy: number,
+            baseTime: number,
+            timeMultiplier: number,
+            o: number,
+            p: number,
+            l: number
+        ) => useLoop
+            ? this.fbmLooping(sx, sy, baseTime * timeMultiplier, safePeriod(timeMultiplier), o, p, l)
+            : this.fbm(sx, sy, baseTime * timeMultiplier, o, p, l);
+        const noiseSample = (
+            sx: number,
+            sy: number,
+            baseTime: number,
+            timeMultiplier: number
+        ) => useLoop
+            ? this.loopingNoise3D(sx, sy, baseTime * timeMultiplier, safePeriod(timeMultiplier))
+            : this.noise3D(sx, sy, baseTime * timeMultiplier);
 
         // Layer 1: Slow, large undulations (breathing)
-        const breathing = this.fbm(
+        const breathing = fbmSample(
             x * noiseScale * 0.3,
             y * noiseScale * 0.3,
-            time * 0.2,
+            time,
+            0.2,
             2,
             0.5,
             2
@@ -535,19 +581,22 @@ export class NoiseEngine {
             octaves,
             persistence,
             lacunarity,
-            warpStrength
+            warpStrength,
+            loopPeriod
         );
 
         // Layer 3: Subtle high-frequency shimmer
-        const shimmerX = this.noise3D(
+        const shimmerX = noiseSample(
             x * noiseScale * 3,
             y * noiseScale * 3,
-            time * 2
+            time,
+            2
         ) * 0.15;
-        const shimmerY = this.noise3D(
+        const shimmerY = noiseSample(
             x * noiseScale * 3 + 100,
             y * noiseScale * 3,
-            time * 2.3
+            time,
+            2.3
         ) * 0.15;
 
         // Combine all layers

@@ -47,6 +47,7 @@ export interface AnimationParams {
     flutterIntensity: number; // High-freq leaf tremor
     // Shared
     falloffRadius: number;
+    loopPeriod: number;       // 0 = no loop, >0 = seconds per seamless loop
 }
 
 export const DEFAULT_PARAMS: AnimationParams = {
@@ -78,6 +79,7 @@ export const DEFAULT_PARAMS: AnimationParams = {
     flutterIntensity: 0.4,
     // Shared
     falloffRadius: 25,
+    loopPeriod: 0,
 };
 
 // Maximum delta time to prevent large jumps after tab becomes active
@@ -171,6 +173,14 @@ export class FrameAnimator {
         this.influence = influence;
     }
 
+    setLoopPeriod(seconds: number): void {
+        this.params.loopPeriod = Math.max(0, seconds);
+    }
+
+    getLoopPeriod(): number {
+        return this.params.loopPeriod;
+    }
+
     start(): void {
         if (this.running) return;
         this.running = true;
@@ -197,7 +207,13 @@ export class FrameAnimator {
         // Calculate delta time
         const dt = Math.min((timestamp - this.lastTimestamp) / 1000, MAX_DELTA_TIME);
         this.lastTimestamp = timestamp;
-        this.time += dt * this.params.speed;
+        const loopPeriod = this.params.loopPeriod;
+        const delta = dt * this.params.speed;
+        if (loopPeriod > 0) {
+            this.time = (this.time + delta) % loopPeriod;
+        } else {
+            this.time += delta;
+        }
 
         // Update all point positions
         this.updatePoints();
@@ -234,6 +250,7 @@ export class FrameAnimator {
             windAngle,
             gustScale,
             flutterIntensity,
+            loopPeriod,
         } = this.params;
 
         // Convert wind angle from degrees to radians
@@ -301,8 +318,9 @@ export class FrameAnimator {
                         persistence,
                         lacunarity,
                         warpStrength,
-                        breathingAmount
-                    }
+                        breathingAmount,
+                    },
+                    loopPeriod
                 );
             }
 
@@ -452,7 +470,8 @@ export class FrameAnimator {
 
     // Render at a specific time (for GIF export)
     renderAtTime(time: number): void {
-        this.time = time;
+        const loopPeriod = this.params.loopPeriod;
+        this.time = loopPeriod > 0 ? time % loopPeriod : time;
         this.updatePoints();
         this.draw();
     }

@@ -259,6 +259,10 @@ export function migrateProject(project: NfluxProject): NfluxProject {
     //     migrated.newField = migrated.newField ?? defaultValue;
     //     migrated.version = 2;
     // }
+    migrated.animationParams = {
+        ...migrated.animationParams,
+        loopPeriod: migrated.animationParams.loopPeriod ?? 0,
+    };
 
     return migrated;
 }

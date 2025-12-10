@@ -24,12 +24,16 @@ import {
     downloadBlob,
     DEFAULT_EXPORT_OPTIONS,
 } from '@/lib/gifExporter';
+import { AnimationParams } from '@/lib/frameAnimator';
 
 interface ExportDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     getCanvas: () => HTMLCanvasElement | null;
     renderAtTime: (time: number) => void;
+    setLoopPeriod: (seconds: number) => void;
+    getLoopPeriod: () => number;
+    params: AnimationParams;
     projectName?: string;
 }
 
@@ -38,6 +42,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     onOpenChange,
     getCanvas,
     renderAtTime,
+    setLoopPeriod,
+    getLoopPeriod,
+    params,
     projectName,
 }) => {
     const [options, setOptions] = useState<GifExportOptions>({
@@ -52,6 +59,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             console.error('No canvas available for export');
             return;
         }
+
+        const previousLoopPeriod = getLoopPeriod();
+        const speed = params.speed ?? 1;
+        const loopSpan = speed > 0 ? options.loopDuration * speed : 0;
+        setLoopPeriod(loopSpan);
 
         setIsExporting(true);
         setProgress({ phase: 'capturing', percent: 0 });
@@ -68,6 +80,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             const exportWidth = options.width;
             const exportHeight = Math.round(options.width * aspectRatio);
 
+            // Resolve a non-transparent background so GIF encoding doesn't turn alpha into black
+            const backgroundColor =
+                getComputedStyle(mainCanvas.closest('main') || document.body).backgroundColor ||
+                '#ffffff';
+
             // Create export canvas at target resolution
             const exportCanvas = document.createElement('canvas');
             exportCanvas.width = exportWidth;
@@ -80,8 +97,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                 // Render the frame at this time
                 renderAtTime(time);
 
-                // Copy and scale from main canvas to export canvas
-                exportCtx.clearRect(0, 0, exportWidth, exportHeight);
+                // Paint background then copy and scale from main canvas to export canvas
+                exportCtx.fillStyle = backgroundColor;
+                exportCtx.fillRect(0, 0, exportWidth, exportHeight);
                 exportCtx.drawImage(mainCanvas, 0, 0, exportWidth, exportHeight);
 
                 // Return the image data
@@ -93,7 +111,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             const frames: ImageData[] = [];
 
             for (let i = 0; i < totalFrames; i++) {
-                const time = (i / totalFrames) * options.loopDuration;
+                const time = loopSpan > 0 ? (i / totalFrames) * loopSpan : 0;
                 frames.push(captureFrame(time));
 
                 setProgress({
@@ -123,8 +141,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         } finally {
             setIsExporting(false);
             setProgress(null);
+            setLoopPeriod(previousLoopPeriod);
         }
-    }, [getCanvas, renderAtTime, options, projectName, onOpenChange]);
+    }, [getCanvas, renderAtTime, setLoopPeriod, getLoopPeriod, options, projectName, onOpenChange]);
 
     const progressText = progress
         ? progress.phase === 'capturing'
