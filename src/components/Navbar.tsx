@@ -6,11 +6,23 @@ import {
   MenubarMenu,
   MenubarSeparator,
   MenubarShortcut,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
   MenubarTrigger,
 } from '@/components/ui/menubar';
+import { RecentProject } from '@/lib/projectManager';
 
 export interface NavbarProps {
   fileName: string;
+  projectName: string | null;
+  isDirty: boolean;
+  recentProjects: RecentProject[];
+  onNew: () => void;
+  onOpen: () => void;
+  onSave: () => void;
+  onSaveAs: () => void;
+  onClearRecent: () => void;
   onImport: (file: File) => void;
   onExport?: () => void;
   onEditAnchors?: () => void;
@@ -21,6 +33,14 @@ export interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   fileName,
+  projectName,
+  isDirty,
+  recentProjects,
+  onNew,
+  onOpen,
+  onSave,
+  onSaveAs,
+  onClearRecent,
   onImport,
   onExport,
   onEditAnchors,
@@ -43,6 +63,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  // Display title with dirty indicator
+  const displayTitle = projectName
+    ? `${projectName}${isDirty ? ' *' : ''}`
+    : isDirty
+      ? 'Untitled *'
+      : fileName;
+
   return (
     <nav className="h-12 border-b flex items-center px-4 gap-4 bg-background">
       <span className="font-semibold text-sm">Nouveau Flux</span>
@@ -51,11 +78,57 @@ export const Navbar: React.FC<NavbarProps> = ({
         <MenubarMenu>
           <MenubarTrigger className="text-sm">File</MenubarTrigger>
           <MenubarContent>
-            <MenubarItem onClick={handleImportClick}>
-              Import SVG
+            <MenubarItem onClick={onNew}>
+              New
+              <MenubarShortcut>⌘N</MenubarShortcut>
+            </MenubarItem>
+            <MenubarItem onClick={onOpen}>
+              Open...
               <MenubarShortcut>⌘O</MenubarShortcut>
             </MenubarItem>
+
+            {/* Recent Projects Submenu */}
+            <MenubarSub>
+              <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
+              <MenubarSubContent>
+                {recentProjects.length === 0 ? (
+                  <MenubarItem disabled>No recent projects</MenubarItem>
+                ) : (
+                  <>
+                    {recentProjects.map((project) => (
+                      <MenubarItem
+                        key={project.name}
+                        onClick={onOpen}
+                        title={`Last modified: ${new Date(project.modified).toLocaleString()}`}
+                      >
+                        {project.name}.nflux
+                      </MenubarItem>
+                    ))}
+                    <MenubarSeparator />
+                    <MenubarItem onClick={onClearRecent}>
+                      Clear Recent
+                    </MenubarItem>
+                  </>
+                )}
+              </MenubarSubContent>
+            </MenubarSub>
+
             <MenubarSeparator />
+
+            <MenubarItem onClick={onSave}>
+              Save
+              <MenubarShortcut>⌘S</MenubarShortcut>
+            </MenubarItem>
+            <MenubarItem onClick={onSaveAs}>
+              Save As...
+              <MenubarShortcut>⇧⌘S</MenubarShortcut>
+            </MenubarItem>
+
+            <MenubarSeparator />
+
+            <MenubarItem onClick={handleImportClick}>
+              Import SVG...
+            </MenubarItem>
             <MenubarItem onClick={onExport} disabled={!onExport}>
               Export GIF
               <MenubarShortcut>⌘E</MenubarShortcut>
@@ -94,11 +167,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       <div className="ml-auto flex items-center gap-2">
         <span className="text-sm text-muted-foreground font-mono">
-          {fileName}
+          {displayTitle}
         </span>
       </div>
 
-      {/* Hidden file input */}
+      {/* Hidden file input for Import SVG */}
       <input
         ref={fileInputRef}
         type="file"
