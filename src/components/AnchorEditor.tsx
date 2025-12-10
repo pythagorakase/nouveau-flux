@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { AnchorData, AnchorType } from '@/lib/anchorInfluence';
 import { StretchConfig, applyStretchConfig, getStretchedViewBox } from '@/lib/stretchZone';
 import { parsePath, extractPathFromSvg, parseTransform, buildPathString, ParsedPath } from '@/lib/pathParser';
+import { analyzePathTopology, PointType, PathTopology } from '@/lib/pbdSolver';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -104,6 +105,10 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
 
     // Parsed path for stretch preview
     const [parsedPath, setParsedPath] = useState<ParsedPath | null>(null);
+
+    // Path topology for debug visualization
+    const [pathTopology, setPathTopology] = useState<PathTopology | null>(null);
+    const [showTopology, setShowTopology] = useState(false);
 
     // Compute stretched path string for preview
     const stretchedPathString = useMemo(() => {
@@ -237,12 +242,13 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                         setViewBox({ width: parts[2], height: parts[3] });
                     }
                 }
-                // Parse path for stretch preview
+                // Parse path for stretch preview and topology visualization
                 const extracted = extractPathFromSvg(text);
                 if (extracted) {
                     const transformOffset = parseTransform(extracted.transform);
                     const parsed = parsePath(extracted.d, transformOffset);
                     setParsedPath(parsed);
+                    setPathTopology(analyzePathTopology(parsed));
                 }
             })
             .catch(err => {
@@ -1308,6 +1314,98 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
+                    {/* Path Topology Debug Overlay */}
+                    {showTopology && parsedPath && pathTopology && (
+                        <svg
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: baseWidth,
+                                height: baseHeight,
+                                pointerEvents: 'none',
+                                overflow: 'visible',
+                            }}
+                            viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
+                        >
+                            {/* Render all points with type-based colors */}
+                            {Array.from({ length: parsedPath.coords.length / 2 }, (_, i) => {
+                                const x = parsedPath.coords[i * 2];
+                                const y = parsedPath.coords[i * 2 + 1];
+                                const type = pathTopology.pointTypes[i];
+
+                                // Color and size based on point type
+                                let color = '#888';
+                                let radius = 2;
+                                let label = '';
+
+                                switch (type) {
+                                    case PointType.MOVE:
+                                        color = '#ef4444'; // red - segment start
+                                        radius = 4;
+                                        label = `M${i}`;
+                                        break;
+                                    case PointType.LINE_END:
+                                        color = '#f97316'; // orange - line endpoint
+                                        radius = 3;
+                                        label = `L${i}`;
+                                        break;
+                                    case PointType.BEZIER_CP1:
+                                        color = '#3b82f6'; // blue - control point 1
+                                        radius = 2;
+                                        break;
+                                    case PointType.BEZIER_CP2:
+                                        color = '#8b5cf6'; // purple - control point 2
+                                        radius = 2;
+                                        break;
+                                    case PointType.BEZIER_END:
+                                        color = '#22c55e'; // green - bezier endpoint
+                                        radius = 3.5;
+                                        label = `E${i}`;
+                                        break;
+                                }
+
+                                return (
+                                    <g key={i}>
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r={radius}
+                                            fill={color}
+                                            stroke="white"
+                                            strokeWidth={0.5}
+                                            opacity={0.9}
+                                        />
+                                        {label && (
+                                            <text
+                                                x={x + 3}
+                                                y={y - 3}
+                                                fill={color}
+                                                fontSize={4}
+                                                fontFamily="monospace"
+                                                fontWeight="bold"
+                                            >
+                                                {label}
+                                            </text>
+                                        )}
+                                    </g>
+                                );
+                            })}
+
+                            {/* Legend */}
+                            <g transform="translate(5, 10)">
+                                <rect x={0} y={0} width={45} height={32} fill="rgba(0,0,0,0.7)" rx={2} />
+                                <circle cx={6} cy={6} r={2.5} fill="#ef4444" />
+                                <text x={11} y={8} fill="white" fontSize={4} fontFamily="monospace">Move</text>
+                                <circle cx={6} cy={13} r={2.5} fill="#22c55e" />
+                                <text x={11} y={15} fill="white" fontSize={4} fontFamily="monospace">BezEnd</text>
+                                <circle cx={6} cy={20} r={2} fill="#3b82f6" />
+                                <text x={11} y={22} fill="white" fontSize={4} fontFamily="monospace">CP1</text>
+                                <circle cx={6} cy={27} r={2} fill="#8b5cf6" />
+                                <text x={11} y={29} fill="white" fontSize={4} fontFamily="monospace">CP2</text>
+                            </g>
+                        </svg>
+                    )}
+
                     {/* Line creation preview */}
                     {lineStart && (
                         <div
@@ -1395,6 +1493,13 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 <Checkbox
                                     checked={snapEnabled}
                                     onCheckedChange={(checked) => setSnapEnabled(checked === true)}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm text-neutral-300">Show Path Topology</Label>
+                                <Checkbox
+                                    checked={showTopology}
+                                    onCheckedChange={(checked) => setShowTopology(checked === true)}
                                 />
                             </div>
                         </div>
