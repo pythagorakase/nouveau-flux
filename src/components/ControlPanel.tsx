@@ -93,6 +93,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             <SelectContent>
               <SelectItem value="psychedelic">Psychedelic</SelectItem>
               <SelectItem value="eldritch">Eldritch</SelectItem>
+              <SelectItem value="vegetal">Vegetal (Wind)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -145,7 +146,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             <SliderControl
               label="Writhe Speed"
               value={params.writheSpeed}
-              min={0.1}
+              min={0}
               max={3}
               step={0.1}
               onChange={(v) => updateParam('writheSpeed', v)}
@@ -167,6 +168,38 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               onChange={(v) => updateParam('coilTightness', v)}
             />
             <SliderControl
+              label="Tension"
+              value={params.tensionAmount}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('tensionAmount', v)}
+            />
+            <SliderControl
+              label="Tremor"
+              value={params.tremorIntensity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('tremorIntensity', v)}
+            />
+            <SliderControl
+              label="Shiver"
+              value={params.shiverIntensity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('shiverIntensity', v)}
+            />
+            <SliderControl
+              label="Pulse"
+              value={params.pulseIntensity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('pulseIntensity', v)}
+            />
+            <SliderControl
               label="Origin X"
               value={params.eldritchOriginX}
               min={-200}
@@ -181,6 +214,52 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               max={200}
               step={1}
               onChange={(v) => updateParam('eldritchOriginY', v)}
+            />
+          </Section>
+        )}
+
+        {/* Vegetal (Wind) Settings */}
+        {params.motionType === 'vegetal' && (
+          <Section title="Wind Settings">
+            <SliderControl
+              label="Wind Speed"
+              value={params.windSpeed}
+              min={0.1}
+              max={2}
+              step={0.1}
+              onChange={(v) => updateParam('windSpeed', v)}
+            />
+            <SliderControl
+              label="Wind Strength"
+              value={params.windStrength}
+              min={0}
+              max={5}
+              step={0.1}
+              onChange={(v) => updateParam('windStrength', v)}
+            />
+            <SliderControl
+              label="Wind Angle"
+              value={params.windAngle}
+              min={0}
+              max={360}
+              step={5}
+              onChange={(v) => updateParam('windAngle', v)}
+            />
+            <SliderControl
+              label="Gust Scale"
+              value={params.gustScale}
+              min={0.005}
+              max={0.05}
+              step={0.005}
+              onChange={(v) => updateParam('gustScale', v)}
+            />
+            <SliderControl
+              label="Flutter"
+              value={params.flutterIntensity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('flutterIntensity', v)}
             />
           </Section>
         )}

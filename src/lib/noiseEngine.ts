@@ -141,6 +141,39 @@ export class NoiseEngine {
         );
     }
 
+    // Ridged noise - creates sharp creases instead of smooth hills
+    // Used for tense, muscular movement (tendons, struggling flesh)
+    ridgedNoise3D(x: number, y: number, z: number): number {
+        const n = this.noise3D(x, y, z);
+        return 1.0 - Math.abs(n);  // Sharp ridges at zero-crossings
+    }
+
+    // Ridged FBM - fractal version of ridged noise for organic detail
+    ridgedFbm(
+        x: number,
+        y: number,
+        time: number,
+        octaves: number = 4,
+        persistence: number = 0.5,
+        lacunarity: number = 2
+    ): number {
+        let value = 0;
+        let amplitude = 1;
+        let frequency = 1;
+        let maxValue = 0;
+
+        for (let i = 0; i < octaves; i++) {
+            const n = this.noise3D(x * frequency, y * frequency, time);
+            // Ridge transformation: sharp peaks instead of smooth hills
+            value += amplitude * (1.0 - Math.abs(n));
+            maxValue += amplitude;
+            amplitude *= persistence;
+            frequency *= lacunarity;
+        }
+
+        return value / maxValue;
+    }
+
     // Fractal Brownian Motion
     fbm(
         x: number,
@@ -204,6 +237,7 @@ export class NoiseEngine {
 
     // Eldritch tentacle displacement - writhing, directional, coiling motion
     // Creates organic tentacle-like movement with wave propagation
+    // Enhanced with tension (ridged noise) and shiver (high-freq tremor) for disturbing effect
     eldritchDisplacement(
         x: number,
         y: number,
@@ -218,9 +252,21 @@ export class NoiseEngine {
             coilTightness: number;
             originX?: number;
             originY?: number;
+            tensionAmount?: number;    // 0-1: how ridged/tense the motion is
+            shiverIntensity?: number;  // 0-1: high-frequency tremor strength
+            tremorIntensity?: number;  // 0-1: medium-frequency "living flesh" quiver
+            pulseIntensity?: number;   // 0-1: slow breathing undertone
         }
     ): { dx: number; dy: number } {
-        const { noiseScale, octaves, persistence, lacunarity, writheSpeed, writheIntensity, coilTightness, originX = 0, originY = 0 } = params;
+        const {
+            noiseScale, octaves, persistence, lacunarity,
+            writheSpeed, writheIntensity, coilTightness,
+            originX = 0, originY = 0,
+            tensionAmount = 0,
+            shiverIntensity = 0,
+            tremorIntensity = 0.5,
+            pulseIntensity = 0.5
+        } = params;
 
         // Use position relative to origin to create wave propagation direction
         // Points further from origin have phase delay - creates "traveling wave"
@@ -229,66 +275,90 @@ export class NoiseEngine {
         const distFromOrigin = Math.sqrt(relX * relX + relY * relY);
         const angle = Math.atan2(relY, relX);
 
-        // Layer 1: Primary writhing wave - fast sinusoidal with noise modulation
-        // The phase offset by distance creates the "tentacle propagation" effect
+        // Layer 1: Primary writhing wave - blend between smooth and ridged based on tension
         const phaseOffset = distFromOrigin * noiseScale * 3;
-        const writheBase = Math.sin(time * writheSpeed * 4 - phaseOffset);
 
-        // Modulate writhe amplitude with noise for organic irregularity
-        const writheModulation = this.fbm(
+        // Smooth writhe (original)
+        const smoothWritheBase = Math.sin(time * writheSpeed * 4 - phaseOffset);
+
+        // Ridged writhe - creates snapping tendon motion
+        // Use ridged noise to modulate a faster sine for asymmetric snap-and-creep
+        const ridgedMod = this.ridgedNoise3D(
             x * noiseScale * 2,
             y * noiseScale * 2,
-            time * 0.5,
-            2,
-            0.6,
-            2
+            time * writheSpeed * 2
         );
+        // Asymmetric timing: fast snap (sin^3 sharpens peaks), slow creep
+        const sharpSin = Math.sin(time * writheSpeed * 5 - phaseOffset);
+        const ridgedWritheBase = sharpSin * sharpSin * sharpSin * ridgedMod;
+
+        // Blend between smooth and ridged based on tension
+        const writheBase = smoothWritheBase * (1 - tensionAmount) + ridgedWritheBase * 2 * tensionAmount;
+
+        // Modulate writhe amplitude with noise for organic irregularity
+        // Use ridged FBM when tense for more angular modulation
+        const smoothMod = this.fbm(x * noiseScale * 2, y * noiseScale * 2, time * 0.5, 2, 0.6, 2);
+        const ridgedModulation = this.ridgedFbm(x * noiseScale * 2, y * noiseScale * 2, time * 0.5, 2, 0.6, 2);
+        const writheModulation = smoothMod * (1 - tensionAmount) + ridgedModulation * tensionAmount;
         const writhe = writheBase * (0.5 + writheModulation * 0.5) * writheIntensity;
 
         // Layer 2: Coiling rotation - spiral motion around local axis
         // Creates the "corkscrew" tentacle movement
         const coilPhase = time * writheSpeed * 2.5 - phaseOffset * 0.7;
-        const coilRadius = this.noise3D(
-            x * noiseScale,
-            y * noiseScale,
-            time * 0.8
-        ) * coilTightness;
+        const coilNoise = this.noise3D(x * noiseScale, y * noiseScale, time * 0.8);
+        const coilRidged = this.ridgedNoise3D(x * noiseScale, y * noiseScale, time * 0.8);
+        const coilRadius = (coilNoise * (1 - tensionAmount) + coilRidged * tensionAmount) * coilTightness;
 
         const coilDx = Math.cos(coilPhase + angle) * coilRadius;
         const coilDy = Math.sin(coilPhase + angle) * coilRadius;
 
         // Layer 3: Secondary undulation - faster, smaller tremors
         // Gives the "living flesh" quiver effect
-        const tremor = this.fbm(
-            x * noiseScale * 4,
-            y * noiseScale * 4,
-            time * writheSpeed * 3,
-            octaves,
-            persistence,
-            lacunarity
-        );
-        const tremorDx = tremor * 0.3;
-        const tremorDy = this.fbm(
-            x * noiseScale * 4 + 100,
-            y * noiseScale * 4,
-            time * writheSpeed * 3.2,
-            octaves,
-            persistence,
-            lacunarity
-        ) * 0.3;
+        let tremorDx = 0;
+        let tremorDy = 0;
+        if (tremorIntensity > 0) {
+            const tremor = this.fbm(
+                x * noiseScale * 4,
+                y * noiseScale * 4,
+                time * writheSpeed * 3,
+                octaves,
+                persistence,
+                lacunarity
+            );
+            tremorDx = tremor * tremorIntensity;
+            tremorDy = this.fbm(
+                x * noiseScale * 4 + 100,
+                y * noiseScale * 4,
+                time * writheSpeed * 3.2,
+                octaves,
+                persistence,
+                lacunarity
+            ) * tremorIntensity;
+        }
 
-        // Layer 4: Slow pulsing "breathing" undertone
-        const pulse = Math.sin(time * writheSpeed * 0.5) * 0.2;
+        // Layer 4: High-frequency shiver - the unsettling "alive" tremor
+        // Independent of writheSpeed so it can be isolated
+        let shiverDx = 0;
+        let shiverDy = 0;
+        if (shiverIntensity > 0) {
+            const shiverScale = noiseScale * 10;  // Very fine detail
+            const shiverTime = time * 8;  // Fast, independent of writhe
+            shiverDx = this.noise3D(x * shiverScale, y * shiverScale, shiverTime) * shiverIntensity * 1.5;
+            shiverDy = this.noise3D(x * shiverScale + 50, y * shiverScale, shiverTime * 1.1) * shiverIntensity * 1.5;
+        }
+
+        // Layer 5: Slow pulsing "breathing" undertone
+        const pulse = Math.sin(time * writheSpeed * 0.5) * 0.2 * pulseIntensity;
 
         // Combine: writhe applies perpendicular to position angle,
-        // coil adds spiral, tremor adds organic noise
+        // coil adds spiral, tremor adds organic noise, shiver adds disturbing quiver
         const perpAngle = angle + Math.PI / 2;
         const writheDx = Math.cos(perpAngle) * writhe;
         const writheDy = Math.sin(perpAngle) * writhe;
 
         return {
-            dx: writheDx + coilDx + tremorDx + pulse,
-            dy: writheDy + coilDy + tremorDy + pulse * 0.7
+            dx: writheDx + coilDx + tremorDx + shiverDx + pulse,
+            dy: writheDy + coilDy + tremorDy + shiverDy + pulse * 0.7
         };
     }
 
@@ -346,6 +416,88 @@ export class NoiseEngine {
         return {
             dx: breathing * 0.5 + warped.dx + shimmerX,
             dy: breathing * 0.3 + warped.dy + shimmerY
+        };
+    }
+
+    // Vegetal/Wind displacement - external force pushing objects directionally
+    // Unlike psychedelic (warps space) or eldritch (internal writhing),
+    // wind is an external vector field that pushes things in a direction
+    vegetalDisplacement(
+        x: number,
+        y: number,
+        time: number,
+        params: {
+            windSpeed: number;       // How fast gusts travel across the scene
+            windStrength: number;    // Max displacement amount
+            windAngle: number;       // Wind direction in radians
+            gustScale: number;       // Size of gust patterns
+            flutterIntensity: number; // High-freq leaf tremor
+        }
+    ): { dx: number; dy: number } {
+        const { windSpeed, windStrength, windAngle, gustScale, flutterIntensity } = params;
+
+        // Wind direction vector
+        const windDirX = Math.cos(windAngle);
+        const windDirY = Math.sin(windAngle);
+
+        // Layer 1: Traveling gust wave
+        // Move the noise sampling position over time to simulate wind passing through
+        // This creates the "wave of wind" effect across the scene
+        const gustOffsetX = time * windSpeed;
+        const gustOffsetY = time * windSpeed * 0.3; // Slight diagonal movement
+
+        const gustIntensity = this.fbm(
+            x * gustScale + gustOffsetX,
+            y * gustScale + gustOffsetY,
+            time * 0.15,  // Slow evolution of the overall pattern
+            3,
+            0.5,
+            2
+        );
+
+        // Layer 2: Secondary slower gust for variation
+        const gustSlow = this.fbm(
+            x * gustScale * 0.5 + gustOffsetX * 0.5,
+            y * gustScale * 0.5 + gustOffsetY * 0.5,
+            time * 0.08,
+            2,
+            0.6,
+            2
+        );
+
+        // Combine gusts: main gust + slower undertone
+        const totalGust = gustIntensity * 0.7 + gustSlow * 0.3;
+
+        // Layer 3: Flutter - high-frequency chaos for leaf tremor
+        // Use noise, NOT sin*cos, for organic randomness
+        let flutterDx = 0;
+        let flutterDy = 0;
+        if (flutterIntensity > 0) {
+            const flutterScale = gustScale * 6;
+            const flutterTime = time * 4;
+            flutterDx = this.noise3D(x * flutterScale, y * flutterScale, flutterTime) * flutterIntensity * 0.3;
+            flutterDy = this.noise3D(x * flutterScale + 77, y * flutterScale, flutterTime * 1.2) * flutterIntensity * 0.3;
+        }
+
+        // Layer 4: Spring-back effect
+        // When gust intensity drops, add slight overshoot in opposite direction
+        // This creates the "bounce back" when wind dies down
+        const gustDerivative = this.fbm(
+            x * gustScale + gustOffsetX + 0.1,
+            y * gustScale + gustOffsetY,
+            time * 0.15,
+            2,
+            0.5,
+            2
+        ) - gustIntensity;
+        const springBack = -gustDerivative * 0.3; // Oppose the change
+
+        // Final displacement: wind direction scaled by gust intensity + flutter
+        const finalStrength = (totalGust + springBack) * windStrength;
+
+        return {
+            dx: windDirX * finalStrength + flutterDx,
+            dy: windDirY * finalStrength + flutterDy
         };
     }
 }

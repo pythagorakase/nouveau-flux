@@ -247,21 +247,7 @@ const AnimatedFrameCore: React.FC<{
         const animator = animatorRef.current;
         if (!animator) return;
 
-        animator.setParams({
-            motionType: params.motionType,
-            speed: params.speed,
-            intensity: params.intensity,
-            breathingAmount: params.breathingAmount,
-            warpStrength: params.warpStrength,
-            writheSpeed: params.writheSpeed,
-            writheIntensity: params.writheIntensity,
-            coilTightness: params.coilTightness,
-            eldritchOriginX: params.eldritchOriginX,
-            eldritchOriginY: params.eldritchOriginY,
-            noiseScale: params.noiseScale,
-            octaves: params.octaves,
-            falloffRadius: params.falloffRadius,
-        });
+        animator.setParams(params);
     }, [params]);
 
     // Recompute influence when falloff changes
