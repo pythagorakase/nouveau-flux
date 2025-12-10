@@ -51,6 +51,13 @@ const DEFAULT_VB = { width: 215, height: 181 };
 const DEFAULT_SVG_PATH = '/button_card_2.svg';
 const DEFAULT_SVG_NAME = 'button_card_2.svg';
 
+const createDefaultAnchorsState = (): AnchorData[] =>
+    defaultAnchorsData.map(a => ({
+        ...a,
+        type: 'rect' as const,
+        groupId: a.rectId ?? 0,
+    }));
+
 function App() {
     // Core state
     const [svgPath, setSvgPath] = useState(DEFAULT_SVG_PATH);
@@ -81,12 +88,22 @@ function App() {
     // Full anchor state (not just counts)
     const [anchors, setAnchors] = useState<AnchorData[]>(() => {
         // Initialize from corners.json with type metadata
-        return defaultAnchorsData.map(a => ({
-            ...a,
-            type: 'rect' as const,
-            groupId: a.rectId ?? 0,
-        }));
+        return createDefaultAnchorsState();
     });
+
+    const defaultStateSnapshot = useMemo(
+        () =>
+            JSON.stringify({
+                params: { ...DEFAULT_PARAMS },
+                anchors: createDefaultAnchorsState(),
+                stretchConfig: createDefaultStretchConfig(DEFAULT_VB.width, DEFAULT_VB.height),
+                zoom: 1,
+                pan: { x: 0, y: 0 },
+                svgContent: null,
+                svgName: DEFAULT_SVG_NAME,
+            }),
+        []
+    );
 
     // Create state snapshot for dirty tracking
     const createStateSnapshot = useCallback(() => {
@@ -103,12 +120,13 @@ function App() {
 
     // Compute dirty state
     const isDirty = useMemo(() => {
+        const snapshot = createStateSnapshot();
         if (!lastSavedState) {
-            // New project is dirty if we have custom SVG content
-            return svgContent !== null || svgPath !== DEFAULT_SVG_PATH;
+            // Compare against pristine defaults before first save
+            return snapshot !== defaultStateSnapshot;
         }
-        return createStateSnapshot() !== lastSavedState;
-    }, [createStateSnapshot, lastSavedState, svgContent, svgPath]);
+        return snapshot !== lastSavedState;
+    }, [createStateSnapshot, lastSavedState, defaultStateSnapshot]);
 
     // Compute counts from anchors
     const anchorCounts = useMemo(() => {
@@ -145,11 +163,7 @@ function App() {
         setSvgName(DEFAULT_SVG_NAME);
         setSvgContent(null);
         setParams({ ...DEFAULT_PARAMS });
-        setAnchors(defaultAnchorsData.map(a => ({
-            ...a,
-            type: 'rect' as const,
-            groupId: a.rectId ?? 0,
-        })));
+        setAnchors(createDefaultAnchorsState());
         setStretchConfig(createDefaultStretchConfig(DEFAULT_VB.width, DEFAULT_VB.height));
         setZoom(1);
         setPan({ x: 0, y: 0 });
