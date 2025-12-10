@@ -20,7 +20,7 @@ import {
 import {
     GifExportOptions,
     GifExportProgress,
-    exportGif,
+    encodeGif,
     downloadBlob,
     DEFAULT_EXPORT_OPTIONS,
 } from '@/lib/gifExporter';
@@ -47,8 +47,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     const [progress, setProgress] = useState<GifExportProgress | null>(null);
 
     const handleExport = useCallback(async () => {
-        const canvas = getCanvas();
-        if (!canvas) {
+        const mainCanvas = getCanvas();
+        if (!mainCanvas) {
             console.error('No canvas available for export');
             return;
         }
@@ -57,29 +57,59 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         setProgress({ phase: 'capturing', percent: 0 });
 
         try {
-            // Calculate export dimensions based on scale
-            const scale = options.width / canvas.width;
-            const exportWidth = Math.round(canvas.width * scale);
-            const exportHeight = Math.round(canvas.height * scale);
+            // Get the actual canvas dimensions (includes DPR scaling)
+            const mainWidth = mainCanvas.width;
+            const mainHeight = mainCanvas.height;
 
-            // Create offscreen canvas for export
+            // Calculate aspect ratio from main canvas
+            const aspectRatio = mainHeight / mainWidth;
+
+            // Export dimensions based on desired width
+            const exportWidth = options.width;
+            const exportHeight = Math.round(options.width * aspectRatio);
+
+            // Create export canvas at target resolution
             const exportCanvas = document.createElement('canvas');
             exportCanvas.width = exportWidth;
             exportCanvas.height = exportHeight;
             const exportCtx = exportCanvas.getContext('2d');
             if (!exportCtx) throw new Error('Could not create export context');
 
-            // Wrapper that renders to export canvas at specified time
-            const renderForExport = (time: number) => {
+            // Custom frame capture that scales from main canvas
+            const captureFrame = (time: number): ImageData => {
+                // Render the frame at this time
                 renderAtTime(time);
-                // Scale down the main canvas to export canvas
+
+                // Copy and scale from main canvas to export canvas
                 exportCtx.clearRect(0, 0, exportWidth, exportHeight);
-                exportCtx.drawImage(canvas, 0, 0, exportWidth, exportHeight);
+                exportCtx.drawImage(mainCanvas, 0, 0, exportWidth, exportHeight);
+
+                // Return the image data
+                return exportCtx.getImageData(0, 0, exportWidth, exportHeight);
             };
 
-            const blob = await exportGif(
-                exportCanvas,
-                renderForExport,
+            // Capture all frames
+            const totalFrames = Math.ceil(options.loopDuration * options.fps);
+            const frames: ImageData[] = [];
+
+            for (let i = 0; i < totalFrames; i++) {
+                const time = (i / totalFrames) * options.loopDuration;
+                frames.push(captureFrame(time));
+
+                setProgress({
+                    phase: 'capturing',
+                    percent: (i / totalFrames) * 50,
+                    currentFrame: i + 1,
+                    totalFrames,
+                });
+
+                // Yield to UI
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
+            // Encode frames to GIF
+            const blob = await encodeGif(
+                frames,
                 { ...options, width: exportWidth, height: exportHeight },
                 setProgress
             );
