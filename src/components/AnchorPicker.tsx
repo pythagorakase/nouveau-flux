@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useControls, button } from 'leva';
+import { parsePath, extractPathFromSvg, parseTransform } from '../lib/pathParser';
+import { analyzePathTopology, PointType } from '../lib/pbdSolver';
 
 interface Rectangle {
     id: number;
@@ -37,6 +39,10 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
     const [svgContent, setSvgContent] = useState<string>('');
     const [svgViewBox, setSvgViewBox] = useState({ width: 215, height: 181 });
 
+    // Path topology for debug visualization
+    const [pathCoords, setPathCoords] = useState<Float32Array | null>(null);
+    const [pathTopology, setPathTopology] = useState<{ pointTypes: PointType[]; segmentStarts: number[] } | null>(null);
+
     // View state
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -70,8 +76,9 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
     svgViewBoxRef.current = svgViewBox;
 
     // Leva controls
-    const { showRects, handleSize, strokeWidth, rectCount } = useControls({
+    const { showRects, showTopology, handleSize, strokeWidth, rectCount } = useControls({
         showRects: { value: true, label: 'Show Rectangles' },
+        showTopology: { value: false, label: 'Show Path Topology' },
         handleSize: { value: 12, min: 6, max: 24, step: 2, label: 'Handle Size' },
         strokeWidth: { value: 2, min: 1, max: 6, step: 0.5, label: 'Stroke Width' },
         rectCount: { value: 4, min: 4, max: 12, step: 1, label: 'Rectangle Count' },
@@ -138,7 +145,7 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
         });
     }, [rectCount]);
 
-    // Load SVG
+    // Load SVG and parse path topology
     useEffect(() => {
         fetch(svgPath)
             .then(res => res.text())
@@ -150,6 +157,15 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
                     if (parts.length >= 4) {
                         setSvgViewBox({ width: parts[2], height: parts[3] });
                     }
+                }
+
+                // Parse path and analyze topology for debug overlay
+                const extracted = extractPathFromSvg(text);
+                if (extracted) {
+                    const transformOffset = parseTransform(extracted.transform);
+                    const parsed = parsePath(extracted.d, transformOffset);
+                    setPathCoords(parsed.coords);
+                    setPathTopology(analyzePathTopology(parsed));
                 }
             })
             .catch(err => console.error('Failed to load SVG:', err));
@@ -569,6 +585,97 @@ export const AnchorPicker: React.FC<AnchorPickerProps> = ({ svgPath }) => {
                         </React.Fragment>
                     );
                 })}
+
+                {/* Path Topology Debug Overlay */}
+                {showTopology && pathCoords && pathTopology && (
+                    <svg
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: baseWidth,
+                            height: baseHeight,
+                            pointerEvents: 'none',
+                        }}
+                        viewBox={`0 0 ${svgViewBox.width} ${svgViewBox.height}`}
+                    >
+                        {/* Render all points with type-based colors */}
+                        {Array.from({ length: pathCoords.length / 2 }, (_, i) => {
+                            const x = pathCoords[i * 2];
+                            const y = pathCoords[i * 2 + 1];
+                            const type = pathTopology.pointTypes[i];
+
+                            // Color and size based on point type
+                            let color = '#888';
+                            let radius = 2;
+                            let label = '';
+
+                            switch (type) {
+                                case PointType.MOVE:
+                                    color = '#ef4444'; // red - segment start
+                                    radius = 4;
+                                    label = `M${i}`;
+                                    break;
+                                case PointType.LINE_END:
+                                    color = '#f97316'; // orange - line endpoint
+                                    radius = 3;
+                                    label = `L${i}`;
+                                    break;
+                                case PointType.BEZIER_CP1:
+                                    color = '#3b82f6'; // blue - control point 1
+                                    radius = 2;
+                                    break;
+                                case PointType.BEZIER_CP2:
+                                    color = '#8b5cf6'; // purple - control point 2
+                                    radius = 2;
+                                    break;
+                                case PointType.BEZIER_END:
+                                    color = '#22c55e'; // green - bezier endpoint
+                                    radius = 3.5;
+                                    label = `E${i}`;
+                                    break;
+                            }
+
+                            return (
+                                <g key={i}>
+                                    <circle
+                                        cx={x}
+                                        cy={y}
+                                        r={radius}
+                                        fill={color}
+                                        stroke="white"
+                                        strokeWidth={0.5}
+                                        opacity={0.9}
+                                    />
+                                    {label && (
+                                        <text
+                                            x={x + 3}
+                                            y={y - 3}
+                                            fill={color}
+                                            fontSize={4}
+                                            fontFamily="monospace"
+                                            fontWeight="bold"
+                                        >
+                                            {label}
+                                        </text>
+                                    )}
+                                </g>
+                            );
+                        })}
+
+                        {/* Legend */}
+                        <g transform="translate(5, 10)">
+                            <rect x={0} y={0} width={45} height={32} fill="rgba(0,0,0,0.7)" rx={2} />
+                            <circle cx={6} cy={6} r={2.5} fill="#ef4444" />
+                            <text x={11} y={8} fill="white" fontSize={4} fontFamily="monospace">Move</text>
+                            <circle cx={6} cy={13} r={2.5} fill="#22c55e" />
+                            <text x={11} y={15} fill="white" fontSize={4} fontFamily="monospace">BezEnd</text>
+                            <circle cx={6} cy={20} r={2} fill="#3b82f6" />
+                            <text x={11} y={22} fill="white" fontSize={4} fontFamily="monospace">CP1</text>
+                            <circle cx={6} cy={27} r={2} fill="#8b5cf6" />
+                            <text x={11} y={29} fill="white" fontSize={4} fontFamily="monospace">CP2</text>
+                        </g>
+                    </svg>
+                )}
             </div>
         </div>
     );
