@@ -21,7 +21,9 @@ const STORAGE_KEY = 'nouveau-flux-recent-projects';
 const MAX_RECENT = 10;
 
 // Filename validation
-const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+const INVALID_FILENAME_CHARS_PATTERN = '[<>:"/\\|?*\x00-\x1F]';
+const INVALID_FILENAME_CHARS = new RegExp(INVALID_FILENAME_CHARS_PATTERN, 'g');
+const INVALID_FILENAME_CHARS_CHECK = new RegExp(INVALID_FILENAME_CHARS_PATTERN);
 const MAX_PROJECT_NAME_LENGTH = 100;
 
 /**
@@ -60,7 +62,7 @@ export function validateProjectName(name: string): string | null {
         return `Project name must be ${MAX_PROJECT_NAME_LENGTH} characters or less`;
     }
 
-    if (INVALID_FILENAME_CHARS.test(name)) {
+    if (INVALID_FILENAME_CHARS_CHECK.test(name)) {
         return 'Project name contains invalid characters';
     }
 
