@@ -216,6 +216,12 @@ const AnimatedFrameCore = forwardRef<AnimatedFrameHandle, AnimatedFrameCoreProps
                 // Extended viewBox to include margin (using stretched dimensions)
                 const marginVbX = (marginX / finalWidth) * stretchedVb.width;
                 const marginVbY = (marginY / finalHeight) * stretchedVb.height;
+
+                // Account for stretch offset: stretch shifts content left/up by stretchAmount/2
+                // We need additional offset to bring shifted content back into positive space
+                const stretchOffsetX = stretchConfig?.x.enabled ? stretchConfig.x.stretchAmount / 2 : 0;
+                const stretchOffsetY = stretchConfig?.y.enabled ? stretchConfig.y.stretchAmount / 2 : 0;
+
                 const extendedVb = {
                     width: stretchedVb.width + marginVbX * 2,
                     height: stretchedVb.height + marginVbY * 2,
@@ -225,7 +231,7 @@ const AnimatedFrameCore = forwardRef<AnimatedFrameHandle, AnimatedFrameCoreProps
                     canvas,
                     stretchedPath,
                     extendedVb,
-                    { offsetX: marginVbX, offsetY: marginVbY }
+                    { offsetX: marginVbX + stretchOffsetX, offsetY: marginVbY + stretchOffsetY }
                 );
 
                 animator.setInfluence(influence);
