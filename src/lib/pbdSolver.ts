@@ -653,8 +653,14 @@ export class PBDSolver {
                 const currentDirX = currentDx / currentLen;
                 const currentDirY = currentDy / currentLen;
 
-                // Blend direction toward rest tangent (preserves tangent direction)
-                const blendFactor = stiffness * 0.3;  // Softer blending for tangent direction
+                // TANGENT INVERSION CHECK: If dot product < 0, tangent has flipped >90°
+                // This causes self-intersecting loops that appear as "cut tips"
+                const dotProduct = currentDirX * c.restTangentIn.x + currentDirY * c.restTangentIn.y;
+
+                // Adaptive blend: normal organic movement uses soft blend,
+                // but inverted tangents get emergency correction
+                const blendFactor = dotProduct < 0 ? 1.0 : stiffness * 0.5;
+
                 const targetDirX = currentDirX + (c.restTangentIn.x - currentDirX) * blendFactor;
                 const targetDirY = currentDirY + (c.restTangentIn.y - currentDirY) * blendFactor;
 
@@ -691,7 +697,10 @@ export class PBDSolver {
                 const restDirX = -c.restTangentOut.x;
                 const restDirY = -c.restTangentOut.y;
 
-                const blendFactor = stiffness * 0.3;
+                // TANGENT INVERSION CHECK for cp2
+                const dotProduct = currentDirX * restDirX + currentDirY * restDirY;
+                const blendFactor = dotProduct < 0 ? 1.0 : stiffness * 0.5;
+
                 const targetDirX = currentDirX + (restDirX - currentDirX) * blendFactor;
                 const targetDirY = currentDirY + (restDirY - currentDirY) * blendFactor;
 
@@ -733,8 +742,8 @@ export class PBDSolver {
                 const targetX = end.x + inDirX * outLen;
                 const targetY = end.y + inDirY * outLen;
 
-                // Soft constraint - blend toward collinear position
-                const c1Stiffness = stiffness * 0.5;  // Softer for C1
+                // C1 collinearity constraint - boost stiffness to prevent kinks
+                const c1Stiffness = stiffness * 0.8;  // Was 0.5, now stronger
                 if (nextCp1.invMass > 0) {
                     nextCp1.x += (targetX - nextCp1.x) * c1Stiffness * nextCp1.invMass;
                     nextCp1.y += (targetY - nextCp1.y) * c1Stiffness * nextCp1.invMass;
