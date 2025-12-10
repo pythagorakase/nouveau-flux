@@ -663,9 +663,10 @@ export class PBDSolver {
                 const normDirX = targetDirX / targetDirLen;
                 const normDirY = targetDirY / targetDirLen;
 
-                // Target position for cp1 (preserve current length, adjust direction)
-                const targetX = prevEnd.x + normDirX * currentLen;
-                const targetY = prevEnd.y + normDirY * currentLen;
+                // Target position for cp1 (preserve REST length, adjust direction)
+                // Using restLengthIn instead of currentLen prevents tug-of-war with distance constraints
+                const targetX = prevEnd.x + normDirX * c.restLengthIn;
+                const targetY = prevEnd.y + normDirY * c.restLengthIn;
 
                 // Apply correction
                 if (cp1.invMass > 0) {
@@ -698,8 +699,10 @@ export class PBDSolver {
                 const normDirX = targetDirX / targetDirLen;
                 const normDirY = targetDirY / targetDirLen;
 
-                const targetX = end.x + normDirX * currentLen;
-                const targetY = end.y + normDirY * currentLen;
+                // Target position for cp2 (preserve REST length, adjust direction)
+                // Using restLengthOut instead of currentLen prevents tug-of-war with distance constraints
+                const targetX = end.x + normDirX * c.restLengthOut;
+                const targetY = end.y + normDirY * c.restLengthOut;
 
                 if (cp2.invMass > 0) {
                     cp2.x += (targetX - cp2.x) * stiffness * cp2.invMass;
