@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/collapsible';
 import { SliderControl } from './SliderControl';
 import { NumberStepper } from './NumberStepper';
-import { AnimationParams, MotionType, EldritchFocusParams } from '@/lib/frameAnimator';
+import { AnimationParams, MotionType, EldritchFocusParams, PBDConfig } from '@/lib/frameAnimator';
 
 export interface AnchorCounts {
   rect: number;
@@ -95,6 +95,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           ...params.eldritchFocus.motionWeights,
           [motion]: value,
         },
+      },
+    });
+  };
+
+  // Helper to update PBD config
+  const updatePBDConfig = <K extends keyof PBDConfig>(key: K, value: PBDConfig[K]) => {
+    onParamsChange({
+      pbdConfig: {
+        ...params.pbdConfig,
+        [key]: value,
       },
     });
   };
@@ -297,6 +307,55 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 step={0.01}
                 onChange={(v) => updateEldritchFocus('restingDrift', v)}
               />
+            </Section>
+
+            <Section title="Physics (PBD)" defaultOpen={false}>
+              <div className="flex items-center gap-2 pb-2">
+                <Checkbox
+                  id="use-pbd"
+                  checked={params.usePBD}
+                  onCheckedChange={(checked) => updateParam('usePBD', Boolean(checked))}
+                />
+                <Label htmlFor="use-pbd" className="text-xs cursor-pointer">
+                  Enable curve continuity solver
+                </Label>
+              </div>
+              {params.usePBD && (
+                <>
+                  <SliderControl
+                    label="Solver Iterations"
+                    value={params.pbdConfig.iterations}
+                    min={1}
+                    max={10}
+                    step={1}
+                    onChange={(v) => updatePBDConfig('iterations', v)}
+                  />
+                  <SliderControl
+                    label="Distance Stiffness"
+                    value={params.pbdConfig.distanceStiffness}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    onChange={(v) => updatePBDConfig('distanceStiffness', v)}
+                  />
+                  <SliderControl
+                    label="Continuity Stiffness"
+                    value={params.pbdConfig.continuityStiffness}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    onChange={(v) => updatePBDConfig('continuityStiffness', v)}
+                  />
+                  <SliderControl
+                    label="Max Stretch"
+                    value={params.pbdConfig.maxStretchRatio}
+                    min={1.1}
+                    max={3}
+                    step={0.1}
+                    onChange={(v) => updatePBDConfig('maxStretchRatio', v)}
+                  />
+                </>
+              )}
             </Section>
           </>
         )}

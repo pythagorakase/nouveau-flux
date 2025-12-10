@@ -527,14 +527,16 @@ export class EldritchFocusEngine {
 
         let dx = 0, dy = 0;
 
+        // Motion magnitudes scaled for typical 200-500 unit viewBox
+        // These produce ~3-12 pixel displacements at default intensity=1
         switch (focus.motionStyle) {
             case 'whip': {
                 // Quick lateral deflection that travels down the path
                 // Sharp attack, smooth release
                 const whipPhase = effectiveTime * 12;
                 const whipWave = Math.sin(whipPhase) * Math.exp(-effectiveTime * 3);
-                dx = perpX * whipWave * focus.direction * 20;
-                dy = perpY * whipWave * focus.direction * 20;
+                dx = perpX * whipWave * focus.direction * 8;
+                dy = perpY * whipWave * focus.direction * 8;
                 break;
             }
 
@@ -544,8 +546,8 @@ export class EldritchFocusEngine {
                 // Add noise for organic irregularity
                 const noiseX = this.noise.noise3D(px * 0.1, py * 0.1, time * 5);
                 const noiseY = this.noise.noise3D(px * 0.1 + 100, py * 0.1, time * 5);
-                dx = (Math.sin(quiverPhase) + noiseX * 0.5) * 8;
-                dy = (Math.cos(quiverPhase * 1.3) + noiseY * 0.5) * 8;
+                dx = (Math.sin(quiverPhase) + noiseX * 0.5) * 3.5;
+                dy = (Math.cos(quiverPhase * 1.3) + noiseY * 0.5) * 3.5;
                 break;
             }
 
@@ -555,8 +557,8 @@ export class EldritchFocusEngine {
                 const strainPhase = Math.min(effectiveTime * 2, 1);
                 const strainCurve = strainPhase * strainPhase * (3 - 2 * strainPhase);
                 // Pull outward from focus
-                dx = dirX * strainCurve * focus.direction * 15;
-                dy = dirY * strainCurve * focus.direction * 15;
+                dx = dirX * strainCurve * focus.direction * 6;
+                dy = dirY * strainCurve * focus.direction * 6;
                 break;
             }
 
@@ -567,8 +569,8 @@ export class EldritchFocusEngine {
                 const ny = this.noise.noise3D(px * 0.05 + 50, py * 0.05, time * thrashSpeed);
                 // Add rapid direction changes
                 const chaos = Math.sin(effectiveTime * 20) * Math.sin(effectiveTime * 13);
-                dx = (nx + chaos * 0.3) * 25;
-                dy = (ny + chaos * 0.3) * 25;
+                dx = (nx + chaos * 0.3) * 10;
+                dy = (ny + chaos * 0.3) * 10;
                 break;
             }
         }
