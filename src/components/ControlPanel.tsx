@@ -192,6 +192,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               onChange={(v) => updateParam('shiverIntensity', v)}
             />
             <SliderControl
+              label="Pulse"
+              value={params.pulseIntensity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => updateParam('pulseIntensity', v)}
+            />
+            <SliderControl
               label="Origin X"
               value={params.eldritchOriginX}
               min={-200}

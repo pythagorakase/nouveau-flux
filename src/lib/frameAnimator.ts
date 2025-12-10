@@ -38,6 +38,7 @@ export interface AnimationParams {
     tensionAmount: number;    // 0-1: how ridged/tense the motion is
     shiverIntensity: number;  // 0-1: high-frequency tremor strength
     tremorIntensity: number;  // 0-1: medium-frequency "living flesh" quiver
+    pulseIntensity: number;   // 0-1: slow breathing undertone
     // Vegetal/Wind-specific
     windSpeed: number;        // How fast gusts travel
     windStrength: number;     // Max displacement amount
@@ -68,6 +69,7 @@ export const DEFAULT_PARAMS: AnimationParams = {
     tensionAmount: 0.5,      // Moderate tension by default
     shiverIntensity: 0.3,    // Subtle shiver
     tremorIntensity: 0.5,    // Medium "living flesh" quiver
+    pulseIntensity: 0.5,     // Subtle breathing
     // Vegetal/Wind defaults
     windSpeed: 0.5,
     windStrength: 2.0,
@@ -226,6 +228,7 @@ export class FrameAnimator {
             tensionAmount,
             shiverIntensity,
             tremorIntensity,
+            pulseIntensity,
             windSpeed,
             windStrength,
             windAngle,
@@ -270,6 +273,7 @@ export class FrameAnimator {
                         tensionAmount,
                         shiverIntensity,
                         tremorIntensity,
+                        pulseIntensity,
                     }
                 );
             } else if (motionType === 'vegetal') {

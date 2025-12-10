@@ -255,6 +255,7 @@ export class NoiseEngine {
             tensionAmount?: number;    // 0-1: how ridged/tense the motion is
             shiverIntensity?: number;  // 0-1: high-frequency tremor strength
             tremorIntensity?: number;  // 0-1: medium-frequency "living flesh" quiver
+            pulseIntensity?: number;   // 0-1: slow breathing undertone
         }
     ): { dx: number; dy: number } {
         const {
@@ -263,7 +264,8 @@ export class NoiseEngine {
             originX = 0, originY = 0,
             tensionAmount = 0,
             shiverIntensity = 0,
-            tremorIntensity = 0.5
+            tremorIntensity = 0.5,
+            pulseIntensity = 0.5
         } = params;
 
         // Use position relative to origin to create wave propagation direction
@@ -334,7 +336,7 @@ export class NoiseEngine {
             ) * tremorIntensity;
         }
 
-        // Layer 5: High-frequency shiver - the unsettling "alive" tremor
+        // Layer 4: High-frequency shiver - the unsettling "alive" tremor
         // Independent of writheSpeed so it can be isolated
         let shiverDx = 0;
         let shiverDy = 0;
@@ -345,8 +347,8 @@ export class NoiseEngine {
             shiverDy = this.noise3D(x * shiverScale + 50, y * shiverScale, shiverTime * 1.1) * shiverIntensity * 1.5;
         }
 
-        // Layer 4: Slow pulsing "breathing" undertone
-        const pulse = Math.sin(time * writheSpeed * 0.5) * 0.2;
+        // Layer 5: Slow pulsing "breathing" undertone
+        const pulse = Math.sin(time * writheSpeed * 0.5) * 0.2 * pulseIntensity;
 
         // Combine: writhe applies perpendicular to position angle,
         // coil adds spiral, tremor adds organic noise, shiver adds disturbing quiver
