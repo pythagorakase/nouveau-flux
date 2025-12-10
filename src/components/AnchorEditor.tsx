@@ -109,6 +109,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
     // Path topology for debug visualization
     const [pathTopology, setPathTopology] = useState<PathTopology | null>(null);
     const [showTopology, setShowTopology] = useState(false);
+    const [showControlPoints, setShowControlPoints] = useState(false);
 
     // Compute stretched path string for preview
     const stretchedPathString = useMemo(() => {
@@ -1448,6 +1449,99 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                         );
                     })()}
 
+                    {/* Control Points Debug Overlay */}
+                    {showControlPoints && parsedPath && pathTopology && (() => {
+                        const controlPoints: Array<{
+                            cp1x: number; cp1y: number;
+                            cp2x: number; cp2y: number;
+                            prevEndX: number; prevEndY: number;
+                            endX: number; endY: number;
+                        }> = [];
+
+                        // Extract control points from path topology
+                        const commands = parsedPath.commands;
+                        const coords = parsedPath.coords;
+                        let pointIdx = 0;
+                        let prevEndX = 0, prevEndY = 0;
+
+                        for (const cmd of commands) {
+                            if (cmd === 0) { // M
+                                prevEndX = coords[pointIdx * 2];
+                                prevEndY = coords[pointIdx * 2 + 1];
+                                pointIdx++;
+                            } else if (cmd === 2) { // C (bezier)
+                                const cp1x = coords[pointIdx * 2];
+                                const cp1y = coords[pointIdx * 2 + 1];
+                                const cp2x = coords[(pointIdx + 1) * 2];
+                                const cp2y = coords[(pointIdx + 1) * 2 + 1];
+                                const endX = coords[(pointIdx + 2) * 2];
+                                const endY = coords[(pointIdx + 2) * 2 + 1];
+
+                                controlPoints.push({
+                                    cp1x, cp1y, cp2x, cp2y,
+                                    prevEndX, prevEndY, endX, endY
+                                });
+
+                                prevEndX = endX;
+                                prevEndY = endY;
+                                pointIdx += 3;
+                            } else if (cmd === 1) { // L
+                                prevEndX = coords[pointIdx * 2];
+                                prevEndY = coords[pointIdx * 2 + 1];
+                                pointIdx++;
+                            }
+                        }
+
+                        return (
+                            <svg
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: baseWidth,
+                                    height: baseHeight,
+                                    pointerEvents: 'none',
+                                    overflow: 'visible',
+                                }}
+                                viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
+                            >
+                                {controlPoints.map((cp, idx) => (
+                                    <g key={idx}>
+                                        {/* Line from prevEnd to cp1 */}
+                                        <line
+                                            x1={cp.prevEndX} y1={cp.prevEndY}
+                                            x2={cp.cp1x} y2={cp.cp1y}
+                                            stroke="#ef4444"
+                                            strokeWidth={0.3}
+                                            opacity={0.6}
+                                        />
+                                        {/* Line from end to cp2 */}
+                                        <line
+                                            x1={cp.endX} y1={cp.endY}
+                                            x2={cp.cp2x} y2={cp.cp2y}
+                                            stroke="#3b82f6"
+                                            strokeWidth={0.3}
+                                            opacity={0.6}
+                                        />
+                                        {/* cp1 point */}
+                                        <circle
+                                            cx={cp.cp1x} cy={cp.cp1y}
+                                            r={0.8}
+                                            fill="#ef4444"
+                                            opacity={0.8}
+                                        />
+                                        {/* cp2 point */}
+                                        <circle
+                                            cx={cp.cp2x} cy={cp.cp2y}
+                                            r={0.8}
+                                            fill="#3b82f6"
+                                            opacity={0.8}
+                                        />
+                                    </g>
+                                ))}
+                            </svg>
+                        );
+                    })()}
+
                     {/* Line creation preview */}
                     {lineStart && (
                         <div
@@ -1547,6 +1641,18 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             {showTopology && pathTopology && (
                                 <div className="text-xs text-neutral-500 pt-1">
                                     {pathTopology.segmentStarts.length} segments (color-coded)
+                                </div>
+                            )}
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm text-neutral-300">Show Control Points</Label>
+                                <Checkbox
+                                    checked={showControlPoints}
+                                    onCheckedChange={(checked) => setShowControlPoints(checked === true)}
+                                />
+                            </div>
+                            {showControlPoints && (
+                                <div className="text-xs text-neutral-500 pt-1">
+                                    <span className="text-red-400">● cp1</span> (start handle) / <span className="text-blue-400">● cp2</span> (end handle)
                                 </div>
                             )}
                         </div>
