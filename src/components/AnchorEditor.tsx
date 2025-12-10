@@ -1314,7 +1314,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
-                    {/* Path Topology Debug Overlay - Simplified: only segment starts labeled */}
+                    {/* Path Topology Debug Overlay - Minimal segment start markers */}
                     {showTopology && parsedPath && pathTopology && (
                         <svg
                             style={{
@@ -1327,43 +1327,42 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             }}
                             viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
                         >
-                            {/* Only render segment starts (Move commands) with labels */}
+                            {/* Segment start markers - small arrows pointing inward */}
                             {pathTopology.segmentStarts.map((pointIdx, segIdx) => {
                                 const x = parsedPath.coords[pointIdx * 2];
                                 const y = parsedPath.coords[pointIdx * 2 + 1];
+                                // Get direction to next point for arrow orientation
+                                const nextIdx = pointIdx + 1;
+                                const hasNext = nextIdx < parsedPath.coords.length / 2;
+                                const nx = hasNext ? parsedPath.coords[nextIdx * 2] : x + 1;
+                                const ny = hasNext ? parsedPath.coords[nextIdx * 2 + 1] : y;
+                                const angle = Math.atan2(ny - y, nx - x) * 180 / Math.PI;
+
                                 return (
-                                    <g key={pointIdx}>
-                                        <circle
-                                            cx={x}
-                                            cy={y}
-                                            r={5}
-                                            fill="#ef4444"
-                                            stroke="white"
-                                            strokeWidth={1}
-                                        />
+                                    <g key={pointIdx} transform={`translate(${x}, ${y})`}>
+                                        {/* Small arrow pointing along path direction */}
+                                        <g transform={`rotate(${angle})`}>
+                                            <path
+                                                d="M-3,-2 L3,0 L-3,2 Z"
+                                                fill="#ef4444"
+                                                opacity={0.7}
+                                            />
+                                        </g>
+                                        {/* Tiny label offset from arrow */}
                                         <text
-                                            x={x + 6}
-                                            y={y + 2}
+                                            x={4}
+                                            y={-3}
                                             fill="#ef4444"
-                                            fontSize={6}
+                                            fontSize={3.5}
                                             fontFamily="monospace"
                                             fontWeight="bold"
-                                            stroke="white"
-                                            strokeWidth={2}
-                                            paintOrder="stroke"
+                                            opacity={0.8}
                                         >
-                                            S{segIdx}
+                                            {segIdx}
                                         </text>
                                     </g>
                                 );
                             })}
-
-                            {/* Legend */}
-                            <g transform="translate(5, 10)">
-                                <rect x={0} y={0} width={55} height={14} fill="rgba(0,0,0,0.8)" rx={2} />
-                                <circle cx={6} cy={7} r={3} fill="#ef4444" stroke="white" strokeWidth={0.5} />
-                                <text x={12} y={10} fill="white" fontSize={5} fontFamily="monospace">Segment start</text>
-                            </g>
                         </svg>
                     )}
 
@@ -1463,6 +1462,11 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                     onCheckedChange={(checked) => setShowTopology(checked === true)}
                                 />
                             </div>
+                            {showTopology && pathTopology && (
+                                <div className="text-xs text-neutral-500 pt-1">
+                                    {pathTopology.segmentStarts.length} segments (red arrows)
+                                </div>
+                            )}
                         </div>
 
                         {/* Stretch Zones */}
