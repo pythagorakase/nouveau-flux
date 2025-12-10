@@ -1314,7 +1314,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
-                    {/* Path Topology Debug Overlay */}
+                    {/* Path Topology Debug Overlay - Simplified: only segment starts labeled */}
                     {showTopology && parsedPath && pathTopology && (
                         <svg
                             style={{
@@ -1327,81 +1327,42 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             }}
                             viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
                         >
-                            {/* Render all points with type-based colors */}
-                            {Array.from({ length: parsedPath.coords.length / 2 }, (_, i) => {
-                                const x = parsedPath.coords[i * 2];
-                                const y = parsedPath.coords[i * 2 + 1];
-                                const type = pathTopology.pointTypes[i];
-
-                                // Color and size based on point type
-                                let color = '#888';
-                                let radius = 2;
-                                let label = '';
-
-                                switch (type) {
-                                    case PointType.MOVE:
-                                        color = '#ef4444'; // red - segment start
-                                        radius = 4;
-                                        label = `M${i}`;
-                                        break;
-                                    case PointType.LINE_END:
-                                        color = '#f97316'; // orange - line endpoint
-                                        radius = 3;
-                                        label = `L${i}`;
-                                        break;
-                                    case PointType.BEZIER_CP1:
-                                        color = '#3b82f6'; // blue - control point 1
-                                        radius = 2;
-                                        break;
-                                    case PointType.BEZIER_CP2:
-                                        color = '#8b5cf6'; // purple - control point 2
-                                        radius = 2;
-                                        break;
-                                    case PointType.BEZIER_END:
-                                        color = '#22c55e'; // green - bezier endpoint
-                                        radius = 3.5;
-                                        label = `E${i}`;
-                                        break;
-                                }
-
+                            {/* Only render segment starts (Move commands) with labels */}
+                            {pathTopology.segmentStarts.map((pointIdx, segIdx) => {
+                                const x = parsedPath.coords[pointIdx * 2];
+                                const y = parsedPath.coords[pointIdx * 2 + 1];
                                 return (
-                                    <g key={i}>
+                                    <g key={pointIdx}>
                                         <circle
                                             cx={x}
                                             cy={y}
-                                            r={radius}
-                                            fill={color}
+                                            r={5}
+                                            fill="#ef4444"
                                             stroke="white"
-                                            strokeWidth={0.5}
-                                            opacity={0.9}
+                                            strokeWidth={1}
                                         />
-                                        {label && (
-                                            <text
-                                                x={x + 3}
-                                                y={y - 3}
-                                                fill={color}
-                                                fontSize={4}
-                                                fontFamily="monospace"
-                                                fontWeight="bold"
-                                            >
-                                                {label}
-                                            </text>
-                                        )}
+                                        <text
+                                            x={x + 6}
+                                            y={y + 2}
+                                            fill="#ef4444"
+                                            fontSize={6}
+                                            fontFamily="monospace"
+                                            fontWeight="bold"
+                                            stroke="white"
+                                            strokeWidth={2}
+                                            paintOrder="stroke"
+                                        >
+                                            S{segIdx}
+                                        </text>
                                     </g>
                                 );
                             })}
 
                             {/* Legend */}
                             <g transform="translate(5, 10)">
-                                <rect x={0} y={0} width={45} height={32} fill="rgba(0,0,0,0.7)" rx={2} />
-                                <circle cx={6} cy={6} r={2.5} fill="#ef4444" />
-                                <text x={11} y={8} fill="white" fontSize={4} fontFamily="monospace">Move</text>
-                                <circle cx={6} cy={13} r={2.5} fill="#22c55e" />
-                                <text x={11} y={15} fill="white" fontSize={4} fontFamily="monospace">BezEnd</text>
-                                <circle cx={6} cy={20} r={2} fill="#3b82f6" />
-                                <text x={11} y={22} fill="white" fontSize={4} fontFamily="monospace">CP1</text>
-                                <circle cx={6} cy={27} r={2} fill="#8b5cf6" />
-                                <text x={11} y={29} fill="white" fontSize={4} fontFamily="monospace">CP2</text>
+                                <rect x={0} y={0} width={55} height={14} fill="rgba(0,0,0,0.8)" rx={2} />
+                                <circle cx={6} cy={7} r={3} fill="#ef4444" stroke="white" strokeWidth={0.5} />
+                                <text x={12} y={10} fill="white" fontSize={5} fontFamily="monospace">Segment start</text>
                             </g>
                         </svg>
                     )}
