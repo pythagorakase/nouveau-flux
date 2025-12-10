@@ -98,12 +98,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {recentProjects.map((project) => (
                       <MenubarItem
                         key={project.name}
-                        onClick={onOpen}
-                        title={`Last modified: ${new Date(project.modified).toLocaleString()}`}
+                        disabled
+                        title={`Last modified: ${new Date(project.modified).toLocaleString()}\n(Use File > Open to reload)`}
                       >
-                        {project.name}.nflux
+                        <span className="text-muted-foreground">{project.name}.nflux</span>
                       </MenubarItem>
                     ))}
+                    <MenubarSeparator />
+                    <MenubarItem disabled className="text-xs text-muted-foreground">
+                      Use File → Open to reload projects
+                    </MenubarItem>
                     <MenubarSeparator />
                     <MenubarItem onClick={onClearRecent}>
                       Clear Recent

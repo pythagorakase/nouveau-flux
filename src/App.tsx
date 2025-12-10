@@ -19,6 +19,8 @@ import {
     addRecentProject,
     clearRecentProjects,
     ProjectError,
+    sanitizeProjectName,
+    validateProjectName,
 } from './lib/projectManager';
 import {
     AlertDialog,
@@ -184,26 +186,28 @@ function App() {
         // Clean up previous blob URL
         if (prevBlobUrlRef.current) {
             URL.revokeObjectURL(prevBlobUrlRef.current);
+            prevBlobUrlRef.current = null;
         }
 
-        // Decode SVG and create blob URL
+        // Decode SVG and create blob URL with cleanup on error
         const svgText = decodeSvg(project.svg.data);
-        const blobUrl = createSvgBlobUrl(project.svg.data);
-        prevBlobUrlRef.current = blobUrl;
+        let blobUrl: string | null = null;
+        try {
+            blobUrl = createSvgBlobUrl(project.svg.data);
+            prevBlobUrlRef.current = blobUrl;
 
-        // Apply all state
-        setSvgPath(blobUrl);
-        setSvgName(project.svg.name);
-        setSvgContent(svgText);
-        setParams(project.animationParams);
-        setAnchors(project.anchors);
-        setStretchConfig(project.stretchConfig);
-        setZoom(project.viewState.zoom);
-        setPan(project.viewState.pan);
-        setProjectName(project.name);
+            // Apply all state
+            setSvgPath(blobUrl);
+            setSvgName(project.svg.name);
+            setSvgContent(svgText);
+            setParams(project.animationParams);
+            setAnchors(project.anchors);
+            setStretchConfig(project.stretchConfig);
+            setZoom(project.viewState.zoom);
+            setPan(project.viewState.pan);
+            setProjectName(project.name);
 
-        // Mark as clean (will update snapshot after state settles)
-        setTimeout(() => {
+            // Mark as clean - use project values directly (no setTimeout needed)
             setLastSavedState(JSON.stringify({
                 params: project.animationParams,
                 anchors: project.anchors,
@@ -213,17 +217,23 @@ function App() {
                 svgContent: svgText,
                 svgName: project.svg.name,
             }));
-        }, 0);
 
-        // Add to recent
-        const recent: RecentProject = {
-            name: project.name,
-            modified: project.modified,
-        };
-        addRecentProject(recent);
-        setRecentProjects(getRecentProjects());
+            // Add to recent
+            const recent: RecentProject = {
+                name: project.name,
+                modified: project.modified,
+            };
+            addRecentProject(recent);
+            setRecentProjects(getRecentProjects());
 
-        toast.success(`Opened "${project.name}"`);
+            toast.success(`Opened "${project.name}"`);
+        } catch (err) {
+            // Clean up blob URL if state application fails
+            if (blobUrl && prevBlobUrlRef.current !== blobUrl) {
+                URL.revokeObjectURL(blobUrl);
+            }
+            throw err;
+        }
     }, []);
 
     const handleOpenProject = useCallback(async () => {
@@ -299,6 +309,13 @@ function App() {
     const handleSaveAsConfirm = useCallback(async () => {
         if (!saveAsName.trim()) return;
 
+        // Validate project name
+        const validationError = validateProjectName(saveAsName);
+        if (validationError) {
+            toast.error(validationError);
+            return;
+        }
+
         // Need SVG content
         let content = svgContent;
         if (!content) {
@@ -312,7 +329,8 @@ function App() {
             }
         }
 
-        const name = saveAsName.trim();
+        // Sanitize the name for safe filename usage
+        const name = sanitizeProjectName(saveAsName);
         setProjectName(name);
 
         const project = createProject(
@@ -327,18 +345,16 @@ function App() {
 
         downloadProject(project);
 
-        // Update state snapshot with new name
-        setTimeout(() => {
-            setLastSavedState(JSON.stringify({
-                params,
-                anchors,
-                stretchConfig,
-                zoom,
-                pan,
-                svgContent: content,
-                svgName,
-            }));
-        }, 0);
+        // Update state snapshot with saved values directly
+        setLastSavedState(JSON.stringify({
+            params,
+            anchors,
+            stretchConfig,
+            zoom,
+            pan,
+            svgContent: content,
+            svgName,
+        }));
 
         // Update recent projects
         addRecentProject({
@@ -446,24 +462,34 @@ function App() {
             // Revoke previous blob URL if it exists
             if (prevBlobUrlRef.current) {
                 URL.revokeObjectURL(prevBlobUrlRef.current);
+                prevBlobUrlRef.current = null;
             }
 
             // Read file content for project embedding
             const content = await file.text();
 
-            // Create a blob URL for the uploaded file
-            const blobUrl = URL.createObjectURL(file);
-            prevBlobUrlRef.current = blobUrl;
+            // Create a blob URL with cleanup on error
+            let blobUrl: string | null = null;
+            try {
+                blobUrl = URL.createObjectURL(file);
+                prevBlobUrlRef.current = blobUrl;
 
-            setSvgPath(blobUrl);
-            setSvgName(file.name);
-            setSvgContent(content);
+                setSvgPath(blobUrl);
+                setSvgName(file.name);
+                setSvgContent(content);
 
-            // Reset project metadata (new unsaved project)
-            setProjectName(null);
-            setLastSavedState(null);
+                // Reset project metadata (new unsaved project)
+                setProjectName(null);
+                setLastSavedState(null);
 
-            toast.success(`Imported "${file.name}"`);
+                toast.success(`Imported "${file.name}"`);
+            } catch (err) {
+                // Clean up blob URL if state application fails
+                if (blobUrl && prevBlobUrlRef.current !== blobUrl) {
+                    URL.revokeObjectURL(blobUrl);
+                }
+                toast.error('Failed to import SVG');
+            }
         };
 
         if (isDirty) {
@@ -482,32 +508,6 @@ function App() {
             }
         };
     }, []);
-
-    // Keyboard shortcuts
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-            const modKey = isMac ? e.metaKey : e.ctrlKey;
-
-            if (modKey && e.key === 'n') {
-                e.preventDefault();
-                handleNewProject();
-            } else if (modKey && e.key === 'o' && !e.shiftKey) {
-                e.preventDefault();
-                handleOpenProject();
-            } else if (modKey && e.key === 's') {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    handleSaveAsProject();
-                } else {
-                    handleSaveProject();
-                }
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleNewProject, handleOpenProject, handleSaveProject, handleSaveAsProject]);
 
     // beforeunload warning for unsaved changes
     useEffect(() => {
@@ -538,6 +538,44 @@ function App() {
         setZoom(1);
         setPan({ x: 0, y: 0 });
     }, []);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+            if (modKey && e.key === 'n') {
+                e.preventDefault();
+                handleNewProject();
+            } else if (modKey && e.key === 'o' && !e.shiftKey) {
+                e.preventDefault();
+                handleOpenProject();
+            } else if (modKey && e.key === 's') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    handleSaveAsProject();
+                } else {
+                    handleSaveProject();
+                }
+            } else if (modKey && (e.key === '=' || e.key === '+')) {
+                // ⌘+ Zoom In (= key is + without shift on most keyboards)
+                e.preventDefault();
+                handleZoomIn();
+            } else if (modKey && e.key === '-') {
+                // ⌘- Zoom Out
+                e.preventDefault();
+                handleZoomOut();
+            } else if (modKey && e.key === '0') {
+                // ⌘0 Reset View
+                e.preventDefault();
+                handleResetView();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleNewProject, handleOpenProject, handleSaveProject, handleSaveAsProject, handleZoomIn, handleZoomOut, handleResetView]);
 
     return (
         <>
