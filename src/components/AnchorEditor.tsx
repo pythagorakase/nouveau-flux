@@ -1318,18 +1318,22 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {showTopology && parsedPath && pathTopology && (() => {
                         const totalPoints = parsedPath.coords.length / 2;
 
-                        // Color palette for alternating segments
-                        const colors = [
-                            'rgba(239, 68, 68, 0.4)',   // red
-                            'rgba(59, 130, 246, 0.4)',  // blue
-                            'rgba(34, 197, 94, 0.4)',   // green
-                            'rgba(168, 85, 247, 0.4)', // purple
-                            'rgba(249, 115, 22, 0.4)', // orange
-                            'rgba(20, 184, 166, 0.4)', // teal
+                        // Colorblind-safe palette: blue, orange, purple (avoid red/green)
+                        const baseColors = [
+                            { stroke: '#3b82f6', name: 'blue' },    // blue
+                            { stroke: '#f59e0b', name: 'orange' },  // orange
+                            { stroke: '#8b5cf6', name: 'purple' },  // purple
                         ];
+                        // Pattern types: solid, diagonal, dots
+                        const patterns = ['solid', 'diagonal', 'dots'];
 
-                        // Build SVG path string for each segment
-                        const segmentPaths: Array<{ d: string; color: string; segIdx: number }> = [];
+                        // Build SVG path string for each segment with color+pattern combo
+                        const segmentPaths: Array<{
+                            d: string;
+                            colorIdx: number;
+                            patternIdx: number;
+                            segIdx: number;
+                        }> = [];
 
                         for (let segIdx = 0; segIdx < pathTopology.segmentStarts.length; segIdx++) {
                             const startIdx = pathTopology.segmentStarts[segIdx];
@@ -1361,15 +1365,17 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                     d += `C${cp1x},${cp1y} ${cp2x},${cp2y} ${ex},${ey} `;
                                     i += 3;
                                 } else {
-                                    // Skip cp2/end if we hit them out of order (shouldn't happen)
                                     i++;
                                 }
                             }
 
                             if (d) {
+                                // Cycle through 9 combos: 3 colors x 3 patterns
+                                const combo = segIdx % 9;
                                 segmentPaths.push({
                                     d,
-                                    color: colors[segIdx % colors.length],
+                                    colorIdx: combo % 3,
+                                    patternIdx: Math.floor(combo / 3),
                                     segIdx,
                                 });
                             }
@@ -1387,17 +1393,60 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 }}
                                 viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
                             >
-                                {segmentPaths.map(({ d, color, segIdx }) => (
-                                    <path
-                                        key={segIdx}
-                                        d={d}
-                                        fill="none"
-                                        stroke={color}
-                                        strokeWidth={8}
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    />
-                                ))}
+                                {/* Pattern definitions */}
+                                <defs>
+                                    {baseColors.map((c, ci) => (
+                                        <React.Fragment key={c.name}>
+                                            {/* Diagonal lines pattern */}
+                                            <pattern
+                                                id={`diag-${c.name}`}
+                                                patternUnits="userSpaceOnUse"
+                                                width="4"
+                                                height="4"
+                                                patternTransform="rotate(45)"
+                                            >
+                                                <line x1="0" y1="0" x2="0" y2="4" stroke={c.stroke} strokeWidth="2" />
+                                            </pattern>
+                                            {/* Dots pattern */}
+                                            <pattern
+                                                id={`dots-${c.name}`}
+                                                patternUnits="userSpaceOnUse"
+                                                width="4"
+                                                height="4"
+                                            >
+                                                <circle cx="2" cy="2" r="1.2" fill={c.stroke} />
+                                            </pattern>
+                                        </React.Fragment>
+                                    ))}
+                                </defs>
+
+                                {segmentPaths.map(({ d, colorIdx, patternIdx, segIdx }) => {
+                                    const color = baseColors[colorIdx];
+                                    const pattern = patterns[patternIdx];
+
+                                    // Determine stroke style based on pattern
+                                    let strokeStyle: string;
+                                    if (pattern === 'solid') {
+                                        strokeStyle = color.stroke;
+                                    } else if (pattern === 'diagonal') {
+                                        strokeStyle = `url(#diag-${color.name})`;
+                                    } else {
+                                        strokeStyle = `url(#dots-${color.name})`;
+                                    }
+
+                                    return (
+                                        <path
+                                            key={segIdx}
+                                            d={d}
+                                            fill="none"
+                                            stroke={strokeStyle}
+                                            strokeWidth={8}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            opacity={0.7}
+                                        />
+                                    );
+                                })}
                             </svg>
                         );
                     })()}
