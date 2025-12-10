@@ -507,6 +507,35 @@ export class PBDSolver {
     applyDisplacements(displacements: Float32Array): void {
         const numParticles = this.particles.length;
 
+        // PRE-FILTER: Smooth control point displacements toward endpoint average
+        // This prevents chaotic gradients that cause self-intersecting loops
+        const smoothedDisplacements = new Float32Array(displacements);
+        const CP_SMOOTHING = 0.6; // How much to blend cp toward endpoint average (0=none, 1=full)
+
+        for (const c of this.bezierConstraints) {
+            // Get endpoint displacements
+            const prevEndDx = c.prevEnd >= 0 ? displacements[c.prevEnd * 2] : 0;
+            const prevEndDy = c.prevEnd >= 0 ? displacements[c.prevEnd * 2 + 1] : 0;
+            const endDx = displacements[c.end * 2];
+            const endDy = displacements[c.end * 2 + 1];
+
+            // Smooth cp1 toward average of prevEnd and end
+            const avgDx = (prevEndDx + endDx) / 2;
+            const avgDy = (prevEndDy + endDy) / 2;
+
+            // Blend cp1 displacement toward endpoint average
+            const cp1Dx = displacements[c.cp1 * 2];
+            const cp1Dy = displacements[c.cp1 * 2 + 1];
+            smoothedDisplacements[c.cp1 * 2] = cp1Dx + (avgDx - cp1Dx) * CP_SMOOTHING;
+            smoothedDisplacements[c.cp1 * 2 + 1] = cp1Dy + (avgDy - cp1Dy) * CP_SMOOTHING;
+
+            // Blend cp2 displacement toward endpoint average
+            const cp2Dx = displacements[c.cp2 * 2];
+            const cp2Dy = displacements[c.cp2 * 2 + 1];
+            smoothedDisplacements[c.cp2 * 2] = cp2Dx + (avgDx - cp2Dx) * CP_SMOOTHING;
+            smoothedDisplacements[c.cp2 * 2 + 1] = cp2Dy + (avgDy - cp2Dy) * CP_SMOOTHING;
+        }
+
         for (let i = 0; i < numParticles; i++) {
             const p = this.particles[i];
 
@@ -516,8 +545,8 @@ export class PBDSolver {
 
             // Start from base position + displacement
             // invMass controls how much the displacement affects this particle
-            const dx = displacements[i * 2];
-            const dy = displacements[i * 2 + 1];
+            const dx = smoothedDisplacements[i * 2];
+            const dy = smoothedDisplacements[i * 2 + 1];
 
             p.x = p.baseX + dx * p.invMass;
             p.y = p.baseY + dy * p.invMass;
