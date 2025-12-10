@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { parsePath, extractPathFromSvg, parseTransform } from '../lib/pathParser';
 import { computeInfluenceMap, loadAnchors, AnchorData } from '../lib/anchorInfluence';
 import { FrameAnimator, DEFAULT_PARAMS, GradientStop, GradientConfig, AnimationParams } from '../lib/frameAnimator';
@@ -8,6 +8,12 @@ import { StretchConfig, applyStretchConfig, getStretchedViewBox } from '../lib/s
 const MARGIN_PERCENT = 0.15;
 
 export type { GradientStop };
+
+// Imperative handle for export functionality
+export interface AnimatedFrameHandle {
+    getCanvas: () => HTMLCanvasElement | null;
+    renderAtTime: (time: number) => void;
+}
 
 export interface StyleConfig {
     fill?: string;
@@ -29,7 +35,7 @@ export interface AnimatedFrameProps {
 }
 
 // Core component that renders the canvas - no Leva dependency
-const AnimatedFrameCore: React.FC<{
+interface AnimatedFrameCoreProps {
     svgPath: string;
     anchorsData: AnchorData[];
     width?: number;
@@ -41,7 +47,9 @@ const AnimatedFrameCore: React.FC<{
     onPanChange?: (pan: { x: number; y: number }) => void;
     stretchConfig?: StretchConfig;
     showAnchors?: boolean;
-}> = ({
+}
+
+const AnimatedFrameCore = forwardRef<AnimatedFrameHandle, AnimatedFrameCoreProps>(({
     svgPath,
     anchorsData,
     width,
@@ -53,7 +61,7 @@ const AnimatedFrameCore: React.FC<{
     onPanChange,
     stretchConfig,
     showAnchors = false,
-}) => {
+}, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animatorRef = useRef<FrameAnimator | null>(null);
@@ -65,6 +73,14 @@ const AnimatedFrameCore: React.FC<{
     // For drag-to-pan
     const isDragging = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });
+
+    // Expose imperative methods for GIF export
+    useImperativeHandle(ref, () => ({
+        getCanvas: () => canvasRef.current,
+        renderAtTime: (time: number) => {
+            animatorRef.current?.renderAtTime(time);
+        },
+    }), []);
 
     // Calculate effective dimensions maintaining aspect ratio
     const { effectiveWidth, effectiveHeight } = useMemo(() => {
@@ -409,10 +425,10 @@ const AnimatedFrameCore: React.FC<{
             )}
         </div>
     );
-};
+});
 
-// Main export
-export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
+// Main export with ref forwarding for GIF export
+export const AnimatedFrame = forwardRef<AnimatedFrameHandle, AnimatedFrameProps>(({
     svgPath,
     anchorsData,
     width,
@@ -424,8 +440,9 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
     onPanChange,
     stretchConfig,
     showAnchors = false,
-}) => (
+}, ref) => (
     <AnimatedFrameCore
+        ref={ref}
         svgPath={svgPath}
         anchorsData={anchorsData}
         width={width}
@@ -438,4 +455,4 @@ export const AnimatedFrame: React.FC<AnimatedFrameProps> = ({
         stretchConfig={stretchConfig}
         showAnchors={showAnchors}
     />
-);
+));

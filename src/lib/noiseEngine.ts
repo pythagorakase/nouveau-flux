@@ -54,6 +54,18 @@ export class NoiseEngine {
         0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1
     ];
 
+    // 4D gradient vectors (32 gradients for 4D noise)
+    private static grad4 = [
+        [0, 1, 1, 1], [0, 1, 1, -1], [0, 1, -1, 1], [0, 1, -1, -1],
+        [0, -1, 1, 1], [0, -1, 1, -1], [0, -1, -1, 1], [0, -1, -1, -1],
+        [1, 0, 1, 1], [1, 0, 1, -1], [1, 0, -1, 1], [1, 0, -1, -1],
+        [-1, 0, 1, 1], [-1, 0, 1, -1], [-1, 0, -1, 1], [-1, 0, -1, -1],
+        [1, 1, 0, 1], [1, 1, 0, -1], [1, -1, 0, 1], [1, -1, 0, -1],
+        [-1, 1, 0, 1], [-1, 1, 0, -1], [-1, -1, 0, 1], [-1, -1, 0, -1],
+        [1, 1, 1, 0], [1, 1, -1, 0], [1, -1, 1, 0], [1, -1, -1, 0],
+        [-1, 1, 1, 0], [-1, 1, -1, 0], [-1, -1, 1, 0], [-1, -1, -1, 0],
+    ];
+
     // 2D Perlin noise
     noise2D(x: number, y: number): number {
         const X = Math.floor(x) & 255;
@@ -139,6 +151,125 @@ export class NoiseEngine {
             ),
             w
         );
+    }
+
+    // 4D Perlin noise (for seamless looping via circular time path)
+    noise4D(x: number, y: number, z: number, w: number): number {
+        const X = Math.floor(x) & 255;
+        const Y = Math.floor(y) & 255;
+        const Z = Math.floor(z) & 255;
+        const W = Math.floor(w) & 255;
+
+        x -= Math.floor(x);
+        y -= Math.floor(y);
+        z -= Math.floor(z);
+        w -= Math.floor(w);
+
+        const fx = this.fade(x);
+        const fy = this.fade(y);
+        const fz = this.fade(z);
+        const fw = this.fade(w);
+
+        // Hash coordinates of the 16 corners of the hypercube
+        const grad4 = NoiseEngine.grad4;
+        const dot4 = (hash: number, dx: number, dy: number, dz: number, dw: number) => {
+            const g = grad4[hash & 31];
+            return g[0] * dx + g[1] * dy + g[2] * dz + g[3] * dw;
+        };
+
+        const A = this.perm[X] + Y;
+        const AA = this.perm[A] + Z;
+        const AB = this.perm[A + 1] + Z;
+        const B = this.perm[X + 1] + Y;
+        const BA = this.perm[B] + Z;
+        const BB = this.perm[B + 1] + Z;
+
+        const AAA = this.perm[AA] + W;
+        const AAB = this.perm[AA + 1] + W;
+        const ABA = this.perm[AB] + W;
+        const ABB = this.perm[AB + 1] + W;
+        const BAA = this.perm[BA] + W;
+        const BAB = this.perm[BA + 1] + W;
+        const BBA = this.perm[BB] + W;
+        const BBB = this.perm[BB + 1] + W;
+
+        // Interpolate along w
+        const lerp = this.lerp.bind(this);
+        return lerp(
+            lerp(
+                lerp(
+                    lerp(dot4(this.perm[AAA], x, y, z, w), dot4(this.perm[BAA], x - 1, y, z, w), fx),
+                    lerp(dot4(this.perm[ABA], x, y - 1, z, w), dot4(this.perm[BBA], x - 1, y - 1, z, w), fx),
+                    fy
+                ),
+                lerp(
+                    lerp(dot4(this.perm[AAB], x, y, z - 1, w), dot4(this.perm[BAB], x - 1, y, z - 1, w), fx),
+                    lerp(dot4(this.perm[ABB], x, y - 1, z - 1, w), dot4(this.perm[BBB], x - 1, y - 1, z - 1, w), fx),
+                    fy
+                ),
+                fz
+            ),
+            lerp(
+                lerp(
+                    lerp(dot4(this.perm[AAA + 1], x, y, z, w - 1), dot4(this.perm[BAA + 1], x - 1, y, z, w - 1), fx),
+                    lerp(dot4(this.perm[ABA + 1], x, y - 1, z, w - 1), dot4(this.perm[BBA + 1], x - 1, y - 1, z, w - 1), fx),
+                    fy
+                ),
+                lerp(
+                    lerp(dot4(this.perm[AAB + 1], x, y, z - 1, w - 1), dot4(this.perm[BAB + 1], x - 1, y, z - 1, w - 1), fx),
+                    lerp(dot4(this.perm[ABB + 1], x, y - 1, z - 1, w - 1), dot4(this.perm[BBB + 1], x - 1, y - 1, z - 1, w - 1), fx),
+                    fy
+                ),
+                fz
+            ),
+            fw
+        );
+    }
+
+    // Looping noise: converts linear time to circular 4D path for seamless loops
+    // When time reaches loopPeriod, we're back at the start
+    loopingNoise3D(
+        x: number,
+        y: number,
+        time: number,
+        loopPeriod: number,
+        radius: number = 1.0
+    ): number {
+        const angle = (time / loopPeriod) * Math.PI * 2;
+        const tz = Math.cos(angle) * radius;
+        const tw = Math.sin(angle) * radius;
+        return this.noise4D(x, y, tz, tw);
+    }
+
+    // Looping FBM - fractal brownian motion that loops seamlessly
+    fbmLooping(
+        x: number,
+        y: number,
+        time: number,
+        loopPeriod: number,
+        octaves: number = 4,
+        persistence: number = 0.5,
+        lacunarity: number = 2
+    ): number {
+        let value = 0;
+        let amplitude = 1;
+        let frequency = 1;
+        let maxValue = 0;
+
+        for (let i = 0; i < octaves; i++) {
+            value += amplitude * this.loopingNoise3D(
+                x * frequency,
+                y * frequency,
+                time,
+                loopPeriod,
+                1.0 // radius
+            );
+            maxValue += amplitude;
+            amplitude *= persistence;
+            frequency *= lacunarity;
+        }
+
+        return value / maxValue;
     }
 
     // Ridged noise - creates sharp creases instead of smooth hills
@@ -275,21 +406,28 @@ export class NoiseEngine {
         const distFromOrigin = Math.sqrt(relX * relX + relY * relY);
         const angle = Math.atan2(relY, relX);
 
+        // TimeWarp: Spatially distort time to break synchronization
+        // Different parts of the image experience "time" at different speeds
+        // This creates the chaotic "tangle of tentacles" effect where some parts
+        // snap quickly while others linger - like they're struggling independently
+        const timeWarp = this.noise3D(x * 0.01, y * 0.01, time * 0.2);
+        const strugglingTime = time + timeWarp * 2.0;
+
         // Layer 1: Primary writhing wave - blend between smooth and ridged based on tension
         const phaseOffset = distFromOrigin * noiseScale * 3;
 
-        // Smooth writhe (original)
-        const smoothWritheBase = Math.sin(time * writheSpeed * 4 - phaseOffset);
+        // Smooth writhe using warped time for desync
+        const smoothWritheBase = Math.sin(strugglingTime * writheSpeed * 4 - phaseOffset);
 
         // Ridged writhe - creates snapping tendon motion
         // Use ridged noise to modulate a faster sine for asymmetric snap-and-creep
         const ridgedMod = this.ridgedNoise3D(
             x * noiseScale * 2,
             y * noiseScale * 2,
-            time * writheSpeed * 2
+            strugglingTime * writheSpeed * 2
         );
         // Asymmetric timing: fast snap (sin^3 sharpens peaks), slow creep
-        const sharpSin = Math.sin(time * writheSpeed * 5 - phaseOffset);
+        const sharpSin = Math.sin(strugglingTime * writheSpeed * 5 - phaseOffset);
         const ridgedWritheBase = sharpSin * sharpSin * sharpSin * ridgedMod;
 
         // Blend between smooth and ridged based on tension
@@ -304,7 +442,7 @@ export class NoiseEngine {
 
         // Layer 2: Coiling rotation - spiral motion around local axis
         // Creates the "corkscrew" tentacle movement
-        const coilPhase = time * writheSpeed * 2.5 - phaseOffset * 0.7;
+        const coilPhase = strugglingTime * writheSpeed * 2.5 - phaseOffset * 0.7;
         const coilNoise = this.noise3D(x * noiseScale, y * noiseScale, time * 0.8);
         const coilRidged = this.ridgedNoise3D(x * noiseScale, y * noiseScale, time * 0.8);
         const coilRadius = (coilNoise * (1 - tensionAmount) + coilRidged * tensionAmount) * coilTightness;
@@ -466,7 +604,10 @@ export class NoiseEngine {
         );
 
         // Combine gusts: main gust + slower undertone
-        const totalGust = gustIntensity * 0.7 + gustSlow * 0.3;
+        // RECTIFIED: Shift noise from [-1, 1] to [0, 1] so wind only pushes, never pulls backward
+        // This creates natural "push and relax" behavior instead of vibration
+        const rawGust = gustIntensity * 0.7 + gustSlow * 0.3;
+        const rectifiedGust = Math.pow((rawGust + 1) / 2, 2); // Cubic for punchy gusts, long calm
 
         // Layer 3: Flutter - high-frequency chaos for leaf tremor
         // Use noise, NOT sin*cos, for organic randomness
@@ -480,8 +621,8 @@ export class NoiseEngine {
         }
 
         // Layer 4: Spring-back effect
-        // When gust intensity drops, add slight overshoot in opposite direction
-        // This creates the "bounce back" when wind dies down
+        // When gust intensity drops, add slight overshoot recovery
+        // This creates the natural "bounce back" when wind dies down
         const gustDerivative = this.fbm(
             x * gustScale + gustOffsetX + 0.1,
             y * gustScale + gustOffsetY,
@@ -490,10 +631,11 @@ export class NoiseEngine {
             0.5,
             2
         ) - gustIntensity;
-        const springBack = -gustDerivative * 0.3; // Oppose the change
+        // Rectify the spring-back too - only resist recovery, don't push backward
+        const springBack = Math.max(0, -gustDerivative * 0.2);
 
-        // Final displacement: wind direction scaled by gust intensity + flutter
-        const finalStrength = (totalGust + springBack) * windStrength;
+        // Final displacement: wind direction scaled by rectified gust intensity + flutter
+        const finalStrength = (rectifiedGust + springBack) * windStrength;
 
         return {
             dx: windDirX * finalStrength + flutterDx,

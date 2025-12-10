@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { AnimatedFrame } from './components/AnimatedFrame';
+import { AnimatedFrame, AnimatedFrameHandle } from './components/AnimatedFrame';
 import { Navbar } from './components/Navbar';
+import { ExportDialog } from './components/ExportDialog';
 import { ControlPanel } from './components/ControlPanel';
 import { AnchorEditor } from './components/AnchorEditor';
 import { AnimationParams, DEFAULT_PARAMS } from './lib/frameAnimator';
@@ -82,10 +83,12 @@ function App() {
     // Dialog state
     const [showDiscardDialog, setShowDiscardDialog] = useState(false);
     const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+    const [showExportDialog, setShowExportDialog] = useState(false);
     const [saveAsName, setSaveAsName] = useState('');
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
     const prevBlobUrlRef = useRef<string | null>(null);
+    const animatedFrameRef = useRef<AnimatedFrameHandle>(null);
 
     // Full anchor state (not just counts)
     const [anchors, setAnchors] = useState<AnchorData[]>(() => {
@@ -593,6 +596,7 @@ function App() {
                     onSaveAs={handleSaveAsProject}
                     onClearRecent={handleClearRecent}
                     onImport={handleImport}
+                    onExport={() => setShowExportDialog(true)}
                     onEditAnchors={() => setIsEditingAnchors(true)}
                     onZoomIn={handleZoomIn}
                     onZoomOut={handleZoomOut}
@@ -601,6 +605,7 @@ function App() {
                 <div className="flex-1 flex overflow-hidden">
                     <main className="flex-1 bg-neutral-100 overflow-hidden relative">
                         <AnimatedFrame
+                            ref={animatedFrameRef}
                             svgPath={svgPath}
                             anchorsData={anchorsData}
                             params={params}
@@ -698,6 +703,15 @@ function App() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Export GIF Dialog */}
+            <ExportDialog
+                open={showExportDialog}
+                onOpenChange={setShowExportDialog}
+                getCanvas={() => animatedFrameRef.current?.getCanvas() ?? null}
+                renderAtTime={(time) => animatedFrameRef.current?.renderAtTime(time)}
+                projectName={projectName ?? undefined}
+            />
         </>
     );
 }

@@ -449,4 +449,16 @@ export class FrameAnimator {
     reset(): void {
         this.time = 0;
     }
+
+    // Render at a specific time (for GIF export)
+    renderAtTime(time: number): void {
+        this.time = time;
+        this.updatePoints();
+        this.draw();
+    }
+
+    // Get the canvas element (for GIF export)
+    getCanvas(): HTMLCanvasElement {
+        return this.ctx.canvas;
+    }
 }

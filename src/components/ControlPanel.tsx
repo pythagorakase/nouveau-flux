@@ -237,14 +237,19 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               step={0.1}
               onChange={(v) => updateParam('windStrength', v)}
             />
-            <SliderControl
-              label="Wind Angle"
-              value={params.windAngle}
-              min={0}
-              max={360}
-              step={5}
-              onChange={(v) => updateParam('windAngle', v)}
-            />
+            <div className="space-y-1">
+              <SliderControl
+                label="Wind Angle"
+                value={params.windAngle}
+                min={0}
+                max={360}
+                step={5}
+                onChange={(v) => updateParam('windAngle', v)}
+              />
+              <p className="text-xs text-muted-foreground">
+                0°→ 90°↓ 180°← 270°↑
+              </p>
+            </div>
             <SliderControl
               label="Gust Scale"
               value={params.gustScale}
