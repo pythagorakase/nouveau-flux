@@ -20,6 +20,53 @@ const CURRENT_VERSION = 1;
 const STORAGE_KEY = 'nouveau-flux-recent-projects';
 const MAX_RECENT = 10;
 
+// Filename validation
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+const MAX_PROJECT_NAME_LENGTH = 100;
+
+/**
+ * Sanitize a project name for use as a filename
+ * Removes invalid characters and enforces length limits
+ */
+export function sanitizeProjectName(name: string): string {
+    // Remove invalid filesystem characters
+    let sanitized = name.replace(INVALID_FILENAME_CHARS, '');
+
+    // Trim whitespace
+    sanitized = sanitized.trim();
+
+    // Enforce length limit
+    if (sanitized.length > MAX_PROJECT_NAME_LENGTH) {
+        sanitized = sanitized.slice(0, MAX_PROJECT_NAME_LENGTH);
+    }
+
+    // Fallback if name becomes empty
+    if (!sanitized) {
+        sanitized = 'Untitled';
+    }
+
+    return sanitized;
+}
+
+/**
+ * Validate a project name and return error message if invalid
+ */
+export function validateProjectName(name: string): string | null {
+    if (!name || !name.trim()) {
+        return 'Project name cannot be empty';
+    }
+
+    if (name.length > MAX_PROJECT_NAME_LENGTH) {
+        return `Project name must be ${MAX_PROJECT_NAME_LENGTH} characters or less`;
+    }
+
+    if (INVALID_FILENAME_CHARS.test(name)) {
+        return 'Project name contains invalid characters';
+    }
+
+    return null; // Valid
+}
+
 /**
  * Project file schema
  */
