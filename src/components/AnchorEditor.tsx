@@ -1314,39 +1314,63 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
-                    {/* Path Topology Debug Overlay - Show GAPS between segments */}
+                    {/* Path Topology Debug Overlay - Alternating segment highlights */}
                     {showTopology && parsedPath && pathTopology && (() => {
                         const totalPoints = parsedPath.coords.length / 2;
-                        const GAP_THRESHOLD = 2; // Units - gaps larger than this are shown
 
-                        // Find gaps: where segment N ends far from segment N+1 start
-                        const gaps: Array<{
-                            endSegIdx: number;
-                            startSegIdx: number;
-                            endX: number;
-                            endY: number;
-                            startX: number;
-                            startY: number;
-                            distance: number;
-                        }> = [];
+                        // Color palette for alternating segments
+                        const colors = [
+                            'rgba(239, 68, 68, 0.4)',   // red
+                            'rgba(59, 130, 246, 0.4)',  // blue
+                            'rgba(34, 197, 94, 0.4)',   // green
+                            'rgba(168, 85, 247, 0.4)', // purple
+                            'rgba(249, 115, 22, 0.4)', // orange
+                            'rgba(20, 184, 166, 0.4)', // teal
+                        ];
 
-                        for (let i = 0; i < pathTopology.segmentStarts.length - 1; i++) {
-                            const segEndIdx = pathTopology.segmentStarts[i + 1] - 1;
-                            const nextSegStartIdx = pathTopology.segmentStarts[i + 1];
+                        // Build SVG path string for each segment
+                        const segmentPaths: Array<{ d: string; color: string; segIdx: number }> = [];
 
-                            const endX = parsedPath.coords[segEndIdx * 2];
-                            const endY = parsedPath.coords[segEndIdx * 2 + 1];
-                            const startX = parsedPath.coords[nextSegStartIdx * 2];
-                            const startY = parsedPath.coords[nextSegStartIdx * 2 + 1];
+                        for (let segIdx = 0; segIdx < pathTopology.segmentStarts.length; segIdx++) {
+                            const startIdx = pathTopology.segmentStarts[segIdx];
+                            const endIdx = segIdx < pathTopology.segmentStarts.length - 1
+                                ? pathTopology.segmentStarts[segIdx + 1] - 1
+                                : totalPoints - 1;
 
-                            const dist = Math.sqrt((startX - endX) ** 2 + (startY - endY) ** 2);
-                            if (dist > GAP_THRESHOLD) {
-                                gaps.push({
-                                    endSegIdx: i,
-                                    startSegIdx: i + 1,
-                                    endX, endY,
-                                    startX, startY,
-                                    distance: dist,
+                            let d = '';
+                            let i = startIdx;
+
+                            while (i <= endIdx) {
+                                const x = parsedPath.coords[i * 2];
+                                const y = parsedPath.coords[i * 2 + 1];
+                                const ptype = pathTopology.pointTypes[i];
+
+                                if (ptype === PointType.MOVE) {
+                                    d += `M${x},${y} `;
+                                    i++;
+                                } else if (ptype === PointType.LINE_END) {
+                                    d += `L${x},${y} `;
+                                    i++;
+                                } else if (ptype === PointType.BEZIER_CP1) {
+                                    // Collect cp1, cp2, end for cubic bezier
+                                    const cp1x = x, cp1y = y;
+                                    const cp2x = parsedPath.coords[(i + 1) * 2];
+                                    const cp2y = parsedPath.coords[(i + 1) * 2 + 1];
+                                    const ex = parsedPath.coords[(i + 2) * 2];
+                                    const ey = parsedPath.coords[(i + 2) * 2 + 1];
+                                    d += `C${cp1x},${cp1y} ${cp2x},${cp2y} ${ex},${ey} `;
+                                    i += 3;
+                                } else {
+                                    // Skip cp2/end if we hit them out of order (shouldn't happen)
+                                    i++;
+                                }
+                            }
+
+                            if (d) {
+                                segmentPaths.push({
+                                    d,
+                                    color: colors[segIdx % colors.length],
+                                    segIdx,
                                 });
                             }
                         }
@@ -1363,60 +1387,16 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 }}
                                 viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
                             >
-                                {gaps.map((gap, idx) => (
-                                    <g key={idx}>
-                                        {/* Dashed line showing the gap */}
-                                        <line
-                                            x1={gap.endX}
-                                            y1={gap.endY}
-                                            x2={gap.startX}
-                                            y2={gap.startY}
-                                            stroke="#f59e0b"
-                                            strokeWidth={0.5}
-                                            strokeDasharray="2,1"
-                                            opacity={0.8}
-                                        />
-                                        {/* End marker (blue square) */}
-                                        <g transform={`translate(${gap.endX}, ${gap.endY})`}>
-                                            <rect
-                                                x={-2}
-                                                y={-2}
-                                                width={4}
-                                                height={4}
-                                                fill="#3b82f6"
-                                                opacity={0.8}
-                                            />
-                                            <text
-                                                x={-6}
-                                                y={-3}
-                                                fill="#3b82f6"
-                                                fontSize={3.5}
-                                                fontFamily="monospace"
-                                                fontWeight="bold"
-                                                textAnchor="end"
-                                            >
-                                                {gap.endSegIdx}■
-                                            </text>
-                                        </g>
-                                        {/* Start marker (red arrow) */}
-                                        <g transform={`translate(${gap.startX}, ${gap.startY})`}>
-                                            <circle
-                                                r={2}
-                                                fill="#ef4444"
-                                                opacity={0.8}
-                                            />
-                                            <text
-                                                x={4}
-                                                y={-3}
-                                                fill="#ef4444"
-                                                fontSize={3.5}
-                                                fontFamily="monospace"
-                                                fontWeight="bold"
-                                            >
-                                                ▸{gap.startSegIdx}
-                                            </text>
-                                        </g>
-                                    </g>
+                                {segmentPaths.map(({ d, color, segIdx }) => (
+                                    <path
+                                        key={segIdx}
+                                        d={d}
+                                        fill="none"
+                                        stroke={color}
+                                        strokeWidth={8}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
                                 ))}
                             </svg>
                         );
@@ -1520,9 +1500,7 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                             </div>
                             {showTopology && pathTopology && (
                                 <div className="text-xs text-neutral-500 pt-1">
-                                    {pathTopology.segmentStarts.length} segments
-                                    <br />
-                                    <span className="text-amber-400">---</span> gaps (staple candidates)
+                                    {pathTopology.segmentStarts.length} segments (color-coded)
                                 </div>
                             )}
                         </div>
