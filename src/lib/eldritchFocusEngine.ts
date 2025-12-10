@@ -130,6 +130,7 @@ export class EldritchFocusEngine {
     // Current schedule
     private schedule: FocusSchedule | null = null;
     private scheduleSeed: number = 12345;
+    private scheduleLoopPeriod: number | null = null;
 
     // Cache for displacement calculations
     private lastTime: number = -1;
@@ -392,6 +393,7 @@ export class EldritchFocusEngine {
             totalDuration: loopEnd,
             restPeriods: restPeriods.filter(r => r.end <= loopEnd),
         };
+        this.scheduleLoopPeriod = loopPeriod;
     }
 
     // Check if a path position is near an anchor (pinned point)
@@ -537,9 +539,15 @@ export class EldritchFocusEngine {
     ): Float32Array {
         const numPoints = this.parsedPath.coords.length / 2;
 
+        const targetLoopPeriod = loopPeriod > 0 ? loopPeriod : 10;
+
         // Generate schedule if needed
-        if (!this.schedule || Math.abs(this.schedule.totalDuration - loopPeriod) > 0.1) {
-            this.generateSchedule(loopPeriod > 0 ? loopPeriod : 10, params);
+        if (
+            !this.schedule ||
+            this.scheduleLoopPeriod === null ||
+            Math.abs(this.scheduleLoopPeriod - targetLoopPeriod) > 0.1
+        ) {
+            this.generateSchedule(targetLoopPeriod, params);
         }
 
         // Handle looping
