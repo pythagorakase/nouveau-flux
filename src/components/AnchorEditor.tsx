@@ -1397,24 +1397,24 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                 <defs>
                                     {baseColors.map((c, ci) => (
                                         <React.Fragment key={c.name}>
-                                            {/* Diagonal lines pattern */}
+                                            {/* Diagonal lines pattern - finer */}
                                             <pattern
                                                 id={`diag-${c.name}`}
                                                 patternUnits="userSpaceOnUse"
-                                                width="4"
-                                                height="4"
+                                                width="2"
+                                                height="2"
                                                 patternTransform="rotate(45)"
                                             >
-                                                <line x1="0" y1="0" x2="0" y2="4" stroke={c.stroke} strokeWidth="2" />
+                                                <line x1="0" y1="0" x2="0" y2="2" stroke={c.stroke} strokeWidth="0.8" />
                                             </pattern>
-                                            {/* Dots pattern */}
+                                            {/* Dots pattern - smaller */}
                                             <pattern
                                                 id={`dots-${c.name}`}
                                                 patternUnits="userSpaceOnUse"
-                                                width="4"
-                                                height="4"
+                                                width="2.5"
+                                                height="2.5"
                                             >
-                                                <circle cx="2" cy="2" r="1.2" fill={c.stroke} />
+                                                <circle cx="1.25" cy="1.25" r="0.6" fill={c.stroke} />
                                             </pattern>
                                         </React.Fragment>
                                     ))}
@@ -1440,10 +1440,10 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                             d={d}
                                             fill="none"
                                             stroke={strokeStyle}
-                                            strokeWidth={8}
+                                            strokeWidth={4}
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
-                                            opacity={0.7}
+                                            opacity={0.8}
                                         />
                                     );
                                 })}
