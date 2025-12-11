@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { AnchorData, AnchorType } from '@/lib/anchorInfluence';
 import { StretchConfig, applyStretchConfig, getStretchedViewBox } from '@/lib/stretchZone';
 import { parsePath, extractPathFromSvg, parseTransform, buildPathString, ParsedPath } from '@/lib/pathParser';
-import { analyzePathTopology, PointType, PathTopology } from '@/lib/pbdSolver';
+import { analyzePathTopology, PointType, PathTopology } from '@/lib/pathAnalysis';
 import { Button } from '@/components/ui/button';
 import {
     Select,
