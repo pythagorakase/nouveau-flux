@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { AnchorData, AnchorType } from '@/lib/anchorInfluence';
 import { StretchConfig, applyStretchConfig, getStretchedViewBox } from '@/lib/stretchZone';
 import { parsePath, extractPathFromSvg, parseTransform, buildPathString, ParsedPath } from '@/lib/pathParser';
+import { analyzePathTopology, PointType, PathTopology } from '@/lib/pbdSolver';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -104,6 +105,11 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
 
     // Parsed path for stretch preview
     const [parsedPath, setParsedPath] = useState<ParsedPath | null>(null);
+
+    // Path topology for debug visualization
+    const [pathTopology, setPathTopology] = useState<PathTopology | null>(null);
+    const [showTopology, setShowTopology] = useState(false);
+    const [showControlPoints, setShowControlPoints] = useState(false);
 
     // Compute stretched path string for preview
     const stretchedPathString = useMemo(() => {
@@ -237,12 +243,13 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                         setViewBox({ width: parts[2], height: parts[3] });
                     }
                 }
-                // Parse path for stretch preview
+                // Parse path for stretch preview and topology visualization
                 const extracted = extractPathFromSvg(text);
                 if (extracted) {
                     const transformOffset = parseTransform(extracted.transform);
                     const parsed = parsePath(extracted.d, transformOffset);
                     setParsedPath(parsed);
+                    setPathTopology(analyzePathTopology(parsed));
                 }
             })
             .catch(err => {
@@ -1308,6 +1315,233 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                     {/* Anchor handles */}
                     {showAnchors && anchors.map((anchor, i) => renderAnchor(anchor, i))}
 
+                    {/* Path Topology Debug Overlay - Alternating segment highlights */}
+                    {showTopology && parsedPath && pathTopology && (() => {
+                        const totalPoints = parsedPath.coords.length / 2;
+
+                        // Colorblind-safe palette: blue, orange, purple (avoid red/green)
+                        const baseColors = [
+                            { stroke: '#3b82f6', name: 'blue' },    // blue
+                            { stroke: '#f59e0b', name: 'orange' },  // orange
+                            { stroke: '#8b5cf6', name: 'purple' },  // purple
+                        ];
+                        // Pattern types: solid, diagonal, dots
+                        const patterns = ['solid', 'diagonal', 'dots'];
+
+                        // Build SVG path string for each segment with color+pattern combo
+                        const segmentPaths: Array<{
+                            d: string;
+                            colorIdx: number;
+                            patternIdx: number;
+                            segIdx: number;
+                        }> = [];
+
+                        for (let segIdx = 0; segIdx < pathTopology.segmentStarts.length; segIdx++) {
+                            const startIdx = pathTopology.segmentStarts[segIdx];
+                            const endIdx = segIdx < pathTopology.segmentStarts.length - 1
+                                ? pathTopology.segmentStarts[segIdx + 1] - 1
+                                : totalPoints - 1;
+
+                            let d = '';
+                            let i = startIdx;
+
+                            while (i <= endIdx) {
+                                const x = parsedPath.coords[i * 2];
+                                const y = parsedPath.coords[i * 2 + 1];
+                                const ptype = pathTopology.pointTypes[i];
+
+                                if (ptype === PointType.MOVE) {
+                                    d += `M${x},${y} `;
+                                    i++;
+                                } else if (ptype === PointType.LINE_END) {
+                                    d += `L${x},${y} `;
+                                    i++;
+                                } else if (ptype === PointType.BEZIER_CP1) {
+                                    // Collect cp1, cp2, end for cubic bezier
+                                    const cp1x = x, cp1y = y;
+                                    const cp2x = parsedPath.coords[(i + 1) * 2];
+                                    const cp2y = parsedPath.coords[(i + 1) * 2 + 1];
+                                    const ex = parsedPath.coords[(i + 2) * 2];
+                                    const ey = parsedPath.coords[(i + 2) * 2 + 1];
+                                    d += `C${cp1x},${cp1y} ${cp2x},${cp2y} ${ex},${ey} `;
+                                    i += 3;
+                                } else {
+                                    i++;
+                                }
+                            }
+
+                            if (d) {
+                                // Cycle through 9 combos: 3 colors x 3 patterns
+                                const combo = segIdx % 9;
+                                segmentPaths.push({
+                                    d,
+                                    colorIdx: combo % 3,
+                                    patternIdx: Math.floor(combo / 3),
+                                    segIdx,
+                                });
+                            }
+                        }
+
+                        return (
+                            <svg
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: baseWidth,
+                                    height: baseHeight,
+                                    pointerEvents: 'none',
+                                    overflow: 'visible',
+                                }}
+                                viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
+                            >
+                                {/* Pattern definitions */}
+                                <defs>
+                                    {baseColors.map((c, ci) => (
+                                        <React.Fragment key={c.name}>
+                                            {/* Diagonal lines pattern - very fine */}
+                                            <pattern
+                                                id={`diag-${c.name}`}
+                                                patternUnits="userSpaceOnUse"
+                                                width="1.2"
+                                                height="1.2"
+                                                patternTransform="rotate(45)"
+                                            >
+                                                <line x1="0" y1="0" x2="0" y2="1.2" stroke={c.stroke} strokeWidth="0.4" />
+                                            </pattern>
+                                            {/* Dots pattern - very small */}
+                                            <pattern
+                                                id={`dots-${c.name}`}
+                                                patternUnits="userSpaceOnUse"
+                                                width="1.5"
+                                                height="1.5"
+                                            >
+                                                <circle cx="0.75" cy="0.75" r="0.35" fill={c.stroke} />
+                                            </pattern>
+                                        </React.Fragment>
+                                    ))}
+                                </defs>
+
+                                {segmentPaths.map(({ d, colorIdx, patternIdx, segIdx }) => {
+                                    const color = baseColors[colorIdx];
+                                    const pattern = patterns[patternIdx];
+
+                                    // Determine fill style based on pattern
+                                    let fillStyle: string;
+                                    if (pattern === 'solid') {
+                                        fillStyle = color.stroke;
+                                    } else if (pattern === 'diagonal') {
+                                        fillStyle = `url(#diag-${color.name})`;
+                                    } else {
+                                        fillStyle = `url(#dots-${color.name})`;
+                                    }
+
+                                    return (
+                                        <path
+                                            key={segIdx}
+                                            d={d + 'Z'}
+                                            fill={fillStyle}
+                                            stroke="none"
+                                            opacity={0.5}
+                                        />
+                                    );
+                                })}
+                            </svg>
+                        );
+                    })()}
+
+                    {/* Control Points Debug Overlay */}
+                    {showControlPoints && parsedPath && pathTopology && (() => {
+                        const controlPoints: Array<{
+                            cp1x: number; cp1y: number;
+                            cp2x: number; cp2y: number;
+                            prevEndX: number; prevEndY: number;
+                            endX: number; endY: number;
+                        }> = [];
+
+                        // Extract control points from path topology
+                        const commands = parsedPath.commands;
+                        const coords = parsedPath.coords;
+                        let pointIdx = 0;
+                        let prevEndX = 0, prevEndY = 0;
+
+                        for (const cmd of commands) {
+                            if (cmd === 0) { // M
+                                prevEndX = coords[pointIdx * 2];
+                                prevEndY = coords[pointIdx * 2 + 1];
+                                pointIdx++;
+                            } else if (cmd === 2) { // C (bezier)
+                                const cp1x = coords[pointIdx * 2];
+                                const cp1y = coords[pointIdx * 2 + 1];
+                                const cp2x = coords[(pointIdx + 1) * 2];
+                                const cp2y = coords[(pointIdx + 1) * 2 + 1];
+                                const endX = coords[(pointIdx + 2) * 2];
+                                const endY = coords[(pointIdx + 2) * 2 + 1];
+
+                                controlPoints.push({
+                                    cp1x, cp1y, cp2x, cp2y,
+                                    prevEndX, prevEndY, endX, endY
+                                });
+
+                                prevEndX = endX;
+                                prevEndY = endY;
+                                pointIdx += 3;
+                            } else if (cmd === 1) { // L
+                                prevEndX = coords[pointIdx * 2];
+                                prevEndY = coords[pointIdx * 2 + 1];
+                                pointIdx++;
+                            }
+                        }
+
+                        return (
+                            <svg
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: baseWidth,
+                                    height: baseHeight,
+                                    pointerEvents: 'none',
+                                    overflow: 'visible',
+                                }}
+                                viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
+                            >
+                                {controlPoints.map((cp, idx) => (
+                                    <g key={idx}>
+                                        {/* Line from prevEnd to cp1 */}
+                                        <line
+                                            x1={cp.prevEndX} y1={cp.prevEndY}
+                                            x2={cp.cp1x} y2={cp.cp1y}
+                                            stroke="#ef4444"
+                                            strokeWidth={0.3}
+                                            opacity={0.6}
+                                        />
+                                        {/* Line from end to cp2 */}
+                                        <line
+                                            x1={cp.endX} y1={cp.endY}
+                                            x2={cp.cp2x} y2={cp.cp2y}
+                                            stroke="#3b82f6"
+                                            strokeWidth={0.3}
+                                            opacity={0.6}
+                                        />
+                                        {/* cp1 point */}
+                                        <circle
+                                            cx={cp.cp1x} cy={cp.cp1y}
+                                            r={0.8}
+                                            fill="#ef4444"
+                                            opacity={0.8}
+                                        />
+                                        {/* cp2 point */}
+                                        <circle
+                                            cx={cp.cp2x} cy={cp.cp2y}
+                                            r={0.8}
+                                            fill="#3b82f6"
+                                            opacity={0.8}
+                                        />
+                                    </g>
+                                ))}
+                            </svg>
+                        );
+                    })()}
+
                     {/* Line creation preview */}
                     {lineStart && (
                         <div
@@ -1397,6 +1631,30 @@ export const AnchorEditor: React.FC<AnchorEditorProps> = ({
                                     onCheckedChange={(checked) => setSnapEnabled(checked === true)}
                                 />
                             </div>
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm text-neutral-300">Show Path Topology</Label>
+                                <Checkbox
+                                    checked={showTopology}
+                                    onCheckedChange={(checked) => setShowTopology(checked === true)}
+                                />
+                            </div>
+                            {showTopology && pathTopology && (
+                                <div className="text-xs text-neutral-500 pt-1">
+                                    {pathTopology.segmentStarts.length} segments (color-coded)
+                                </div>
+                            )}
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm text-neutral-300">Show Control Points</Label>
+                                <Checkbox
+                                    checked={showControlPoints}
+                                    onCheckedChange={(checked) => setShowControlPoints(checked === true)}
+                                />
+                            </div>
+                            {showControlPoints && (
+                                <div className="text-xs text-neutral-500 pt-1">
+                                    <span className="text-red-400">● cp1</span> (start handle) / <span className="text-blue-400">● cp2</span> (end handle)
+                                </div>
+                            )}
                         </div>
 
                         {/* Stretch Zones */}

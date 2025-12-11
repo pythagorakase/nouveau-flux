@@ -4,3 +4,13 @@ dist/
 *.local
 temp/
 TODO.md
+
+# Gemini CLI Files
+.gemini/
+gha-creds-*.json
+
+# GitHub Actions
+.github/
+
+# Obsidian Vault
+.obsidian/

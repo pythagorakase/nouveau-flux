@@ -2,8 +2,20 @@
 
 import { ParsedPath } from './pathParser';
 import { NoiseEngine } from './noiseEngine';
+import {
+    EldritchFocusEngine,
+    EldritchFocusParams,
+    DEFAULT_ELDRITCH_FOCUS_PARAMS,
+    DEFAULT_LOOP_PERIOD,
+    MotionWeights,
+} from './eldritchFocusEngine';
+import { PBDSolver, PBDConfig, DEFAULT_PBD_CONFIG } from './pbdSolver';
+
+export type { PBDConfig };
 
 export type MotionType = 'psychedelic' | 'eldritch' | 'vegetal';
+
+export type { MotionWeights, EldritchFocusParams };
 
 export interface GradientStop {
     offset: number; // 0-1
@@ -29,16 +41,21 @@ export interface AnimationParams {
     // Psychedelic-specific
     warpStrength: number;
     breathingAmount: number;
-    // Eldritch-specific
+    // Eldritch focus-based parameters (new system)
+    eldritchFocus: EldritchFocusParams;
+    // Eldritch PBD physics for curve continuity
+    usePBD: boolean;          // Enable Position Based Dynamics
+    pbdConfig: PBDConfig;     // PBD solver configuration
+    // Legacy eldritch params (kept for backwards compat, unused in new system)
     writheSpeed: number;
     writheIntensity: number;
     coilTightness: number;
     eldritchOriginX: number;
     eldritchOriginY: number;
-    tensionAmount: number;    // 0-1: how ridged/tense the motion is
-    shiverIntensity: number;  // 0-1: high-frequency tremor strength
-    tremorIntensity: number;  // 0-1: medium-frequency "living flesh" quiver
-    pulseIntensity: number;   // 0-1: slow breathing undertone
+    tensionAmount: number;
+    shiverIntensity: number;
+    tremorIntensity: number;
+    pulseIntensity: number;
     // Vegetal/Wind-specific
     windSpeed: number;        // How fast gusts travel
     windStrength: number;     // Max displacement amount
@@ -53,7 +70,7 @@ export interface AnimationParams {
 export const DEFAULT_PARAMS: AnimationParams = {
     motionType: 'psychedelic',
     speed: 0.3,
-    intensity: 3,
+    intensity: 1,
     noiseScale: 0.01,
     octaves: 4,
     persistence: 0.5,
@@ -61,16 +78,21 @@ export const DEFAULT_PARAMS: AnimationParams = {
     // Psychedelic defaults
     warpStrength: 15,
     breathingAmount: 0.5,
-    // Eldritch defaults
+    // Eldritch focus-based defaults (new system)
+    eldritchFocus: { ...DEFAULT_ELDRITCH_FOCUS_PARAMS },
+    // Eldritch PBD physics defaults
+    usePBD: true,             // Enable by default for smooth tentacles
+    pbdConfig: { ...DEFAULT_PBD_CONFIG },
+    // Legacy eldritch defaults (unused in new system)
     writheSpeed: 1.0,
     writheIntensity: 0.8,
     coilTightness: 0.5,
     eldritchOriginX: 0,
     eldritchOriginY: 0,
-    tensionAmount: 0.5,      // Moderate tension by default
-    shiverIntensity: 0.3,    // Subtle shiver
-    tremorIntensity: 0.5,    // Medium "living flesh" quiver
-    pulseIntensity: 0.5,     // Subtle breathing
+    tensionAmount: 0.5,
+    shiverIntensity: 0.3,
+    tremorIntensity: 0.5,
+    pulseIntensity: 0.5,
     // Vegetal/Wind defaults
     windSpeed: 0.5,
     windStrength: 2.0,
@@ -107,6 +129,16 @@ export class FrameAnimator {
 
     // Noise engine
     private noise: NoiseEngine;
+
+    // Eldritch focus engine (for new focus-based eldritch mode)
+    private eldritchEngine: EldritchFocusEngine | null = null;
+
+    // PBD solver for curve continuity (used with eldritch mode)
+    private pbdSolver: PBDSolver | null = null;
+
+    // Muscular hydrostat stretch ratios (from PBD solver)
+    // Values > 1 = stretched (thinner), < 1 = compressed (thicker)
+    private stretchRatios: Float32Array | null = null;
 
     // Parameters (updated via setParams)
     private params: AnimationParams = { ...DEFAULT_PARAMS };
@@ -158,6 +190,11 @@ export class FrameAnimator {
 
     setParams(params: Partial<AnimationParams>): void {
         this.params = { ...this.params, ...params };
+
+        // Propagate PBD config updates to the live solver
+        if ('pbdConfig' in params && this.pbdSolver) {
+            this.pbdSolver.setConfig(params.pbdConfig ?? {});
+        }
     }
 
     setFillColor(color: string): void {
@@ -171,10 +208,31 @@ export class FrameAnimator {
 
     setInfluence(influence: Float32Array): void {
         this.influence = influence;
+        // Initialize or update eldritch engine with new influence
+        if (this.eldritchEngine) {
+            this.eldritchEngine.setAnchorInfluence(influence);
+        } else {
+            this.eldritchEngine = new EldritchFocusEngine(this.parsedPath, influence);
+        }
+        // Initialize or update PBD solver with new influence
+        if (this.pbdSolver) {
+            this.pbdSolver.updateAnchorInfluence(influence);
+        } else {
+            this.pbdSolver = new PBDSolver(this.parsedPath, influence, this.params.pbdConfig);
+        }
     }
 
     setLoopPeriod(seconds: number): void {
         this.params.loopPeriod = Math.max(0, seconds);
+    }
+
+    /**
+     * Get current stretch ratios from PBD solver (for muscular hydrostat effect)
+     * Values > 1 = stretched (thinner), < 1 = compressed (thicker)
+     * Returns null if PBD is not active
+     */
+    getStretchRatios(): Float32Array | null {
+        return this.stretchRatios;
     }
 
     getLoopPeriod(): number {
@@ -236,15 +294,7 @@ export class FrameAnimator {
             lacunarity,
             warpStrength,
             breathingAmount,
-            writheSpeed,
-            writheIntensity,
-            coilTightness,
-            eldritchOriginX,
-            eldritchOriginY,
-            tensionAmount,
-            shiverIntensity,
-            tremorIntensity,
-            pulseIntensity,
+            eldritchFocus,
             windSpeed,
             windStrength,
             windAngle,
@@ -256,6 +306,48 @@ export class FrameAnimator {
         // Convert wind angle from degrees to radians
         const windAngleRad = (windAngle * Math.PI) / 180;
 
+        // For eldritch mode, use the focus-based engine
+        if (motionType === 'eldritch' && this.eldritchEngine) {
+            const displacements = this.eldritchEngine.calculateDisplacements(
+                this.time,
+                eldritchFocus,
+                loopPeriod > 0 ? loopPeriod : DEFAULT_LOOP_PERIOD
+            );
+
+            // Use PBD solver for curve continuity if enabled
+            if (this.params.usePBD && this.pbdSolver) {
+                // Scale displacements by intensity before applying to PBD
+                const scaledDisplacements = new Float32Array(displacements.length);
+                for (let i = 0; i < numPoints; i++) {
+                    scaledDisplacements[i * 2] = displacements[i * 2] * intensity;
+                    scaledDisplacements[i * 2 + 1] = displacements[i * 2 + 1] * intensity;
+                }
+
+                // Apply displacements and solve constraints for curve continuity
+                this.pbdSolver.applyDisplacements(scaledDisplacements);
+                this.pbdSolver.solve();
+
+                // Get solved positions and stretch ratios
+                const solvedPositions = this.pbdSolver.getPositions();
+                this.animatedCoords.set(solvedPositions);
+
+                // Store stretch ratios for muscular hydrostat effect
+                this.stretchRatios = this.pbdSolver.getStretchRatios();
+            } else {
+                // Direct displacement (old behavior, no PBD)
+                for (let i = 0; i < numPoints; i++) {
+                    const weight = this.influence[i];
+                    const baseX = this.baseCoords[i * 2];
+                    const baseY = this.baseCoords[i * 2 + 1];
+
+                    this.animatedCoords[i * 2] = baseX + displacements[i * 2] * weight * intensity;
+                    this.animatedCoords[i * 2 + 1] = baseY + displacements[i * 2 + 1] * weight * intensity;
+                }
+            }
+            return;
+        }
+
+        // Non-eldritch modes: process point by point
         for (let i = 0; i < numPoints; i++) {
             const weight = this.influence[i];
 
@@ -272,28 +364,7 @@ export class FrameAnimator {
             // Get displacement based on motion type
             let displacement: { dx: number; dy: number };
 
-            if (motionType === 'eldritch') {
-                displacement = this.noise.eldritchDisplacement(
-                    baseX,
-                    baseY,
-                    this.time,
-                    {
-                        noiseScale,
-                        octaves,
-                        persistence,
-                        lacunarity,
-                        writheSpeed,
-                        writheIntensity,
-                        coilTightness,
-                        originX: eldritchOriginX,
-                        originY: eldritchOriginY,
-                        tensionAmount,
-                        shiverIntensity,
-                        tremorIntensity,
-                        pulseIntensity,
-                    }
-                );
-            } else if (motionType === 'vegetal') {
+            if (motionType === 'vegetal') {
                 displacement = this.noise.vegetalDisplacement(
                     baseX,
                     baseY,
