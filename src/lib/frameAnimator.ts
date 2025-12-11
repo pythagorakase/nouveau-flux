@@ -190,6 +190,11 @@ export class FrameAnimator {
 
     setParams(params: Partial<AnimationParams>): void {
         this.params = { ...this.params, ...params };
+
+        // Propagate PBD config updates to the live solver
+        if ('pbdConfig' in params && this.pbdSolver) {
+            this.pbdSolver.setConfig(params.pbdConfig ?? {});
+        }
     }
 
     setFillColor(color: string): void {

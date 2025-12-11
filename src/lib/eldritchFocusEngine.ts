@@ -168,6 +168,7 @@ export class EldritchFocusEngine {
     private schedule: FocusSchedule | null = null;
     private scheduleSeed: number = 12345;
     private scheduleLoopPeriod: number | null = null;
+    private lastScheduleParams: EldritchFocusParams | null = null;
 
     // Cache for displacement calculations
     // lastTime: Used by getScheduleInfo() to report currently active foci
@@ -505,6 +506,7 @@ export class EldritchFocusEngine {
             restPeriods: restPeriods.filter(r => r.end <= loopEnd),
         };
         this.scheduleLoopPeriod = loopPeriod;
+        this.lastScheduleParams = this.cloneFocusParams(params);
     }
 
     // Check if a path position is near an anchor (pinned point)
@@ -520,6 +522,32 @@ export class EldritchFocusEngine {
             }
         }
         return false;
+    }
+
+    private cloneFocusParams(params: EldritchFocusParams): EldritchFocusParams {
+        return {
+            ...params,
+            motionWeights: { ...params.motionWeights },
+        };
+    }
+
+    private focusParamsEqual(a: EldritchFocusParams, b: EldritchFocusParams): boolean {
+        return (
+            a.minFoci === b.minFoci &&
+            a.maxFoci === b.maxFoci &&
+            a.focusDurationMin === b.focusDurationMin &&
+            a.focusDurationMax === b.focusDurationMax &&
+            a.restDurationMin === b.restDurationMin &&
+            a.restDurationMax === b.restDurationMax &&
+            a.propagationSpeed === b.propagationSpeed &&
+            a.propagationDecay === b.propagationDecay &&
+            a.baseIntensity === b.baseIntensity &&
+            a.restingDrift === b.restingDrift &&
+            a.motionWeights.whip === b.motionWeights.whip &&
+            a.motionWeights.quiver === b.motionWeights.quiver &&
+            a.motionWeights.strain === b.motionWeights.strain &&
+            a.motionWeights.thrash === b.motionWeights.thrash
+        );
     }
 
     // Get the envelope (intensity) of a focus at a given time
@@ -655,11 +683,12 @@ export class EldritchFocusEngine {
 
         const targetLoopPeriod = loopPeriod > 0 ? loopPeriod : 10;
 
-        // Generate schedule if needed
+        // Generate schedule if needed (on loop period change or param change)
         if (
             !this.schedule ||
             this.scheduleLoopPeriod === null ||
-            Math.abs(this.scheduleLoopPeriod - targetLoopPeriod) > 0.1
+            Math.abs(this.scheduleLoopPeriod - targetLoopPeriod) > 0.1 ||
+            (this.lastScheduleParams && !this.focusParamsEqual(params, this.lastScheduleParams))
         ) {
             this.generateSchedule(targetLoopPeriod, params);
         }
